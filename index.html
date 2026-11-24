@@ -104,6 +104,7 @@
   .keypad button { height: 72px; border-radius: 50%; font-size: 1.5rem; padding: 0; }
   .keypad button.ghost { border-color: transparent; background: transparent; font-size: 1.6rem; }
   #lockMsg { min-height: 1.6em; color: var(--danger); font-size: .9rem; }
+  body.app .webOnly, body:not(.app) .appOnly { display: none !important; }
   .linkbtn { border: none; background: none; color: var(--muted); text-decoration: underline; font-size: .85rem; }
 </style>
 </head>
@@ -165,6 +166,7 @@
   <!-- المصروفات -->
   <section id="tab-expenses" class="hidden">
     <div class="toolbar">
+      <button class="primary appOnly" onclick="readPhoneSms()">📲 جلب رسائل البنك من الجوال</button>
       <button class="primary" onclick="openSms()">📩 لصق رسائل البنك</button>
       <label class="btn" style="margin:0;color:var(--text)">📄 استيراد كشف حساب (CSV)
         <input type="file" accept=".csv,text/csv" class="hidden" onchange="importStatement(this)">
@@ -178,7 +180,7 @@
     </div>
     <div id="expSummary"></div>
     <div id="expList"></div>
-    <details class="card">
+    <details class="card webOnly">
       <summary><b>⚡ التسجيل التلقائي من رسائل البنك (اختياري)</b></summary>
       <p class="muted">بعد ما يكون التطبيق على رابط ثابت، تقدر تخلي جوالك يرسل له كل رسالة بنك تجيك، ويسجّلها لحاله بدون ما تفتحه.</p>
       <p><b>آيفون — تطبيق «الاختصارات»:</b></p>
@@ -225,7 +227,7 @@
       <p class="muted">كل بياناتك من أرقام وفواتير ومصروفات تنحفظ على جهازك وبس، وما ترسل لأي خادم. لما تشارك التطبيق مع أحد، يوصله التطبيق فاضي وهو يعبّيه ببياناته.</p>
       <div class="row">
         <button class="primary" onclick="shareApp()">↗ شارك التطبيق</button>
-        <button onclick="installApp()">📲 تثبيت على الشاشة الرئيسية</button>
+        <button class="webOnly" onclick="installApp()">📲 تثبيت على الشاشة الرئيسية</button>
       </div>
     </div>
     <div class="card">
@@ -324,7 +326,7 @@
     <button>1</button><button>2</button><button>3</button>
     <button>4</button><button>5</button><button>6</button>
     <button>7</button><button>8</button><button>9</button>
-    <button class="ghost" id="bioKey" data-k="bio" title="البصمة / Face ID">👆</button>
+    <button class="ghost" id="bioKey" data-k="bio" title="البصمة">👆</button>
     <button>0</button>
     <button class="ghost" data-k="del" title="مسح">⌫</button>
   </div>
@@ -370,9 +372,10 @@
     <label>ضع الأرقام المستوردة في تصنيف</label>
     <select id="importGroup"><option>أخرى</option><option>العائلة</option><option>الأصدقاء</option><option>الزملاء</option></select>
     <div class="card" style="margin-top:12px" id="pickerBox">
-      <b>اختيار مباشر من جهات الاتصال</b>
-      <p class="muted">يشتغل على أندرويد (متصفح Chrome). تقدر تحدد كل الأسماء مرة وحدة.</p>
-      <button type="button" class="primary" onclick="pickContacts()">اختيار من جهات الاتصال</button>
+      <b>مباشرة من جهات الاتصال</b>
+      <p class="muted webOnly">يشتغل على أندرويد (متصفح Chrome). تقدر تحدد كل الأسماء مرة وحدة.</p>
+      <p class="muted appOnly">يجلب كل الأرقام اللي في جوالك مرة وحدة بعد ما تسمح له، والمكرر يتجاهله.</p>
+      <button type="button" class="primary" onclick="pickContacts()">📲 جلب الأرقام من جهات الاتصال</button>
     </div>
     <div class="card">
       <b>من ملف (آيفون وأندرويد)</b>
@@ -441,7 +444,12 @@
 
 <script>
 const KEY = 'daftari-data-v1';
-let db = { contacts: [], bills: [], events: [], expenses: [] };
+let db = { contacts: [], bills: [], events: [], expenses: [], settings: {} };
+// داخل تطبيق أندرويد يتوفر جسر AndroidApp (جهات الاتصال، الرسائل، الحفظ، المشاركة، قفل الجوال)
+const IS_APP = !!(window.AndroidApp && AndroidApp.isApp && AndroidApp.isApp());
+document.body.classList.toggle('app', IS_APP);
+const BIO = IS_APP ? 'البصمة / قفل الجوال' : 'البصمة / Face ID';
+let skipLockOnce = false;   // لا نقفل عند الخروج المؤقت لاختيار ملف أو اتصال أو إذن
 
 function load() {
   try { const raw = localStorage.getItem(KEY); if (raw) db = Object.assign(db, JSON.parse(raw)); } catch (e) {}
@@ -773,7 +781,20 @@ function addContacts(list) {
   document.getElementById('contactFilter').value = ''; render();
   toast(`تمت إضافة ${added} رقم` + (dup ? ` — وتم تجاهل ${dup} مكرر` : ''));
 }
+window.onNativeContacts = json => {
+  skipLockOnce = false;
+  const list = JSON.parse(json);
+  if (!list.length) { alert('ما لقيت أرقام في جهات الاتصال.'); return; }
+  addContacts(list);
+};
+window.onNativeDenied = what => {
+  skipLockOnce = false;
+  alert(what === 'sms'
+    ? 'ما تم السماح بقراءة الرسائل. تقدر تسمح لها من إعدادات الجوال ← التطبيقات ← دفتري ← الأذونات.'
+    : 'ما تم السماح بالوصول لجهات الاتصال. تقدر تسمح لها من إعدادات الجوال ← التطبيقات ← دفتري ← الأذونات.');
+};
 async function pickContacts() {
+  if (IS_APP) { skipLockOnce = true; AndroidApp.pickContacts(); return; }
   if (!('contacts' in navigator && 'ContactsManager' in window)) {
     alert('الاختيار المباشر غير مدعوم في هذا المتصفح (الآيفون لا يدعمه). استخدم الاستيراد من ملف بالأسفل.');
     return;
@@ -866,7 +887,7 @@ function fillCatSelects() {
 
 const INCOME_RE = /(إيداع|ايداع|وارد|واردة|استلام|مستلم|credited|deposit|received|استرداد|refund|راتب|salary)/i;
 const DEBIT_RE = /(شراء|purchase|سحب|withdraw|مدفوعات|سداد|payment|مدين|debit|خصم)/i;
-function parseSMS(msg) {
+function parseSMS(msg, ts) {
   const t = normDigits(msg).trim();
   if (!t) return null;
   if (/(رمز|otp|verification|التحقق|كلمة المرور)/i.test(t) && !DEBIT_RE.test(t)) return null;
@@ -886,8 +907,10 @@ function parseSMS(msg) {
     const mm = t.match(re); if (mm) { title = mm[1]; break; }
   }
   title = (title || lines[0]).replace(/\s+(في|on)\s*[:：]?\s*\d.*$/i, '').replace(/\s+/g, ' ').trim().slice(0, 60);
-  const d = parseAnyDate(t) || today();
-  const tm = t.match(/\b(\d{1,2}:\d{2})\b/);
+  const sent = ts ? new Date(+ts) : null;   // وقت وصول الرسالة (من الجوال)
+  const d = parseAnyDate(t) || sent || today();
+  let tm = t.match(/\b(\d{1,2}:\d{2})\b/);
+  if (!tm && sent) tm = [0, String(sent.getHours()).padStart(2, '0') + ':' + String(sent.getMinutes()).padStart(2, '0')];
   const kind = INCOME_RE.test(t) && !DEBIT_RE.test(t) ? 'in' : 'out';
   return { id: uid(), title, amount, date: toISO(d), time: tm ? tm[1].padStart(5, '0') : '', kind,
            category: kind === 'in' ? 'أخرى' : guessCategory(title + ' ' + t), source: 'sms', notes: '' };
@@ -910,7 +933,7 @@ function showPreview(items, note) {
     return `<div class="prev">
       <input type="checkbox" data-i="${i}" ${dup ? '' : 'checked'}>
       <div><b>${esc(x.title)}</b>${dup ? ' <span class="pill warn">مسجّل مسبقاً</span>' : ''}
-        <div class="muted">${esc(x.date)}${x.time ? ' ' + esc(x.time) : ''}</div>
+        <div class="muted">${esc(x.date)}${x.time ? ' ' + esc(x.time) : ''}${x.sender ? ' · ' + esc(x.sender) : ''}</div>
         <select class="mini" data-cat="${i}">${CAT_NAMES.map(c => `<option ${c === x.category ? 'selected' : ''}>${c}</option>`).join('')}</select>
         ${x.kind === 'in' ? '<span class="pill ok">دخل</span>' : ''}</div>
       <span class="${x.kind === 'in' ? 'amount-in' : 'amount-out'}">${money(x.amount)}</span>
@@ -925,12 +948,21 @@ function savePreview() {
     return box.querySelector(`[data-i="${i}"]`).checked;
   });
   const n = addExpenses(chosen);
+  const senders = chosen.map(x => x.sender).filter(Boolean);
+  if (senders.length) {   // نتذكر مرسلي البنك للتسجيل التلقائي لاحقاً
+    const st = db.settings;
+    st.bankSenders = [...new Set([...(st.bankSenders || []), ...senders])];
+    st.smsSince = Math.max(st.smsSince || 0, pendingSmsSince);
+    persist();
+  }
+  pendingSmsSince = 0;
   document.getElementById('previewDlg').close();
   goTab('expenses'); toast(`تم تسجيل ${n} عملية`);
 }
 
 function openSms() { document.getElementById('smsText').value = ''; document.getElementById('smsDlg').showModal(); }
 async function pasteClipboard() {
+  if (IS_APP) { document.getElementById('smsText').value = AndroidApp.clipboard(); return; }
   try { document.getElementById('smsText').value = await navigator.clipboard.readText(); }
   catch (e) { alert('المتصفح لم يسمح بالقراءة من الحافظة، الصق يدوياً.'); }
 }
@@ -998,7 +1030,11 @@ function renderExpenses() {
   const byCat = {}; outs.forEach(x => byCat[x.category] = (byCat[x.category] || 0) + x.amount);
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
   const max = cats.length ? cats[0][1] : 1;
-  document.getElementById('expSummary').innerHTML = `
+  const senders = (db.settings.bankSenders || []);
+  const autoLine = IS_APP && senders.length ? `<div class="card row between">
+      <span>🔄 التسجيل التلقائي شغّال من: <b dir="ltr">${senders.map(esc).join('، ')}</b></span>
+      <button class="small" onclick="stopAutoSms()">إيقاف</button></div>` : '';
+  document.getElementById('expSummary').innerHTML = autoLine + `
     <div class="stats">
       <div class="card stat"><span class="muted">مصروف الشهر</span><b class="amount-out">${money(total)}</b></div>
       <div class="card stat"><span class="muted">الدخل</span><b class="amount-in">${money(income)}</b></div>
@@ -1041,6 +1077,7 @@ function handleIncomingURL() {
 
 // ---------- النسخ الاحتياطي ----------
 function exportData() {
+  if (IS_APP) { skipLockOnce = true; AndroidApp.saveFile('daftari-backup-' + toISO(today()) + '.json', JSON.stringify(db, null, 2)); return; }
   const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'daftari-backup-' + toISO(today()) + '.json'; a.click();
@@ -1052,13 +1089,13 @@ function importData(input) {
     const data = JSON.parse(t);
     if (!data || !Array.isArray(data.contacts)) throw new Error();
     if (!confirm('سيتم استبدال البيانات الحالية بالنسخة المستوردة. متابعة؟')) return;
-    db = { contacts: data.contacts || [], bills: data.bills || [], events: data.events || [], expenses: data.expenses || [] };
+    db = { contacts: data.contacts || [], bills: data.bills || [], events: data.events || [], expenses: data.expenses || [], settings: data.settings || {} };
     persist(); alert('تم الاستيراد بنجاح');
   }).catch(() => alert('الملف غير صالح')).finally(() => input.value = '');
 }
 function wipeAll() {
   if (!confirm('سيتم حذف كل البيانات نهائياً. هل أنت متأكد؟')) return;
-  db = { contacts: [], bills: [], events: [], expenses: [] }; persist();
+  db = { contacts: [], bills: [], events: [], expenses: [], settings: {} }; persist();
 }
 
 // ---------- قفل التطبيق (رمز + بصمة/وجه) ----------
@@ -1080,7 +1117,12 @@ async function hashPin(pin, salt) {
   return b64(bits);
 }
 async function checkPin(pin) { return !!lockCfg && (await hashPin(pin, lockCfg.salt)) === lockCfg.hash; }
+let nativeAuthResolve = null, bioEndedAt = 0;
+window.onDeviceAuth = ok => { const r = nativeAuthResolve; nativeAuthResolve = null; if (r) r(ok); };
+const nativeAuth = () => new Promise(res => { nativeAuthResolve = res; AndroidApp.deviceAuth(); });
+const bioAutoOk = () => Date.now() - bioEndedAt > 2500;   // لا نكرر الطلب مباشرة بعد إلغائه
 async function bioAvailable() {
+  if (IS_APP) { try { return AndroidApp.canDeviceAuth(); } catch (e) { return false; } }
   try { return !!window.PublicKeyCredential && location.protocol !== 'file:' &&
                await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }
   catch (e) { return false; }
@@ -1092,13 +1134,13 @@ async function renderLockSettings() {
   document.getElementById('lockTimeoutBox').classList.toggle('hidden', !on);
   if (on) document.getElementById('lockTimeout').value = String(lockCfg.timeout ?? 60);
   document.getElementById('lockStatus').textContent = on
-    ? `✅ القفل مفعّل برمز من ${lockCfg.len} أرقام${lockCfg.cred ? '، والبصمة أو Face ID مفعّلة' : ''}.`
+    ? `✅ القفل مفعّل برمز من ${lockCfg.len} أرقام${lockCfg.cred ? '، و' + BIO + ' مفعّلة' : ''}.`
     : 'التطبيق يفتح بدون قفل. فعّل رمز عشان محد يفتح بياناتك من جوالك.';
   const bio = on && await bioAvailable();
   document.getElementById('lockBtns').innerHTML = on ? `
       <button onclick="openPin('change')">تغيير الرمز</button>
-      ${bio ? (lockCfg.cred ? '<button onclick="disableBio()">إيقاف البصمة / Face ID</button>'
-                            : '<button class="primary" onclick="enableBio()">👆 تفعيل البصمة / Face ID</button>') : ''}
+      ${bio ? (lockCfg.cred ? `<button onclick="disableBio()">إيقاف ${BIO}</button>`
+                            : `<button class="primary" onclick="enableBio()">👆 تفعيل ${BIO}</button>`) : ''}
       <button onclick="lockNow()">🔒 قفل الآن</button>
       <button class="danger" onclick="openPin('remove')">إلغاء القفل</button>`
     : '<button class="primary" onclick="openPin(\'set\')">🔐 تفعيل رمز القفل</button>';
@@ -1128,11 +1170,16 @@ async function submitPin(e) {
   lockCfg = Object.assign({ timeout: 60 }, lockCfg || {}, { salt, hash: await hashPin(p1, salt), len: p1.length, fails: 0, until: 0 });
   saveLock(); f.closest('dialog').close();
   toast(pinMode === 'set' ? '🔐 تم تفعيل القفل' : 'تم تغيير الرمز');
-  if (pinMode === 'set' && await bioAvailable() && confirm('تبي تفتح التطبيق بالبصمة أو Face ID بعد؟')) enableBio();
+  if (pinMode === 'set' && await bioAvailable() && confirm('تبي تفتح التطبيق بـ' + BIO + ' بعد؟')) enableBio();
   return false;
 }
 
 async function enableBio() {
+  if (IS_APP) {
+    bioBusy = true; const ok = await nativeAuth(); bioBusy = false; bioEndedAt = Date.now();
+    if (ok) { lockCfg.cred = 'device'; saveLock(); toast('👆 تم تفعيل ' + BIO); } else toast('لم يتم التفعيل');
+    return;
+  }
   try {
     bioBusy = true;
     const cred = await navigator.credentials.create({ publicKey: {
@@ -1143,7 +1190,7 @@ async function enableBio() {
       authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
       timeout: 60000,
     }});
-    lockCfg.cred = b64(cred.rawId); saveLock(); toast('👆 تم تفعيل البصمة / Face ID');
+    lockCfg.cred = b64(cred.rawId); saveLock(); toast('👆 تم تفعيل ' + BIO);
   } catch (e) { toast('لم يتم تفعيل البصمة'); }
   finally { bioBusy = false; }
 }
@@ -1152,6 +1199,10 @@ async function bioUnlock() {
   if (!lockCfg || !lockCfg.cred || bioBusy) return;
   bioBusy = true;
   try {
+    if (IS_APP) {
+      if (await nativeAuth()) { lockCfg.fails = 0; lockCfg.until = 0; saveLock(); unlock(); }
+      return;
+    }
     await navigator.credentials.get({ publicKey: {
       challenge: crypto.getRandomValues(new Uint8Array(32)),
       allowCredentials: [{ type: 'public-key', id: unb64(lockCfg.cred) }],
@@ -1159,7 +1210,7 @@ async function bioUnlock() {
     }});
     lockCfg.fails = 0; lockCfg.until = 0; saveLock(); unlock();
   } catch (e) { /* أُلغي أو فشل — يبقى الرمز متاحاً */ }
-  finally { bioBusy = false; }
+  finally { bioBusy = false; bioEndedAt = Date.now(); }
 }
 
 function lockNow() {
@@ -1169,12 +1220,12 @@ function lockNow() {
   document.getElementById('lockScreen').classList.remove('hidden');
   document.getElementById('bioKey').style.visibility = lockCfg.cred ? 'visible' : 'hidden';
   pinBuf = ''; drawDots(); showBlock();
-  if (lockCfg.cred && !document.hidden) setTimeout(bioUnlock, 250);
+  if (lockCfg.cred && !document.hidden && bioAutoOk()) setTimeout(bioUnlock, 250);
 }
 function unlock() {
   document.body.classList.remove('locked');
   document.getElementById('lockScreen').classList.add('hidden');
-  pinBuf = ''; render();
+  pinBuf = ''; render(); autoSyncSms();
 }
 function drawDots(shake) {
   const el = document.getElementById('lockDots');
@@ -1207,7 +1258,7 @@ async function pressKey(k) {
 function forgotPin() {
   if (!confirm('ما فيه طريقة تسترجع فيها الرمز، عشان تبقى بياناتك محمية.\n\nتقدر تمسح كل بيانات التطبيق من هذا الجهاز وتبدأ من جديد. وبعدها تقدر تسترجع نسخة احتياطية إذا كنت مصدّرها قبل.\n\nتبي تكمل؟')) return;
   if (!confirm('تأكيد نهائي: بتنحذف كل الأرقام والفواتير والمواعيد والمصروفات اللي على هذا الجهاز.')) return;
-  db = { contacts: [], bills: [], events: [], expenses: [] };
+  db = { contacts: [], bills: [], events: [], expenses: [], settings: {} };
   try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) {}
   lockCfg = null; saveLock(); unlock(); toast('تم مسح البيانات وإلغاء القفل');
 }
@@ -1219,14 +1270,64 @@ document.addEventListener('keydown', e => {
   const d = normDigits(e.key);
   if (/^\d$/.test(d)) pressKey(d); else if (e.key === 'Backspace') pressKey('del');
 });
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (t.closest('a[href^="tel:"], a[href^="https://wa.me"], input[type=file]') ||
+      (t.closest('label') && t.closest('label').querySelector('input[type=file]'))) skipLockOnce = true;
+}, true);
 document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !isLocked()) autoSyncSms();
   if (!lockCfg || bioBusy) return;
+  if (skipLockOnce) { if (!document.hidden) skipLockOnce = false; return; }
   if (document.hidden) {
     hiddenAt = Date.now();
     if (!(lockCfg.timeout > 0)) lockNow();   // فوراً: نقفل قبل ما يلتقط الجوال صورة للتطبيق
   } else if (!isLocked() && Date.now() - hiddenAt >= (lockCfg.timeout ?? 60) * 1000) lockNow();
-  else if (isLocked() && lockCfg.cred) setTimeout(bioUnlock, 250);
+  else if (isLocked() && lockCfg.cred && bioAutoOk()) setTimeout(bioUnlock, 250);
 });
+
+// ---------- رسائل البنك من الجوال (تطبيق أندرويد) ----------
+let smsMode = 'manual', pendingSmsSince = 0;
+const DAYS90 = () => Date.now() - 90 * 86400000;
+function readPhoneSms() {
+  smsMode = 'manual'; skipLockOnce = true;
+  AndroidApp.readSms(String(DAYS90()));
+  toast('جاري قراءة الرسائل...');
+}
+function autoSyncSms() {
+  const st = db.settings || {};
+  if (!IS_APP || !(st.bankSenders || []).length || !AndroidApp.hasSmsPermission()) return;
+  smsMode = 'auto';
+  AndroidApp.readSms(String(st.smsSince || DAYS90()));
+}
+function stopAutoSms() {
+  if (!confirm('توقف التسجيل التلقائي من رسائل البنك؟')) return;
+  db.settings.bankSenders = []; persist();
+}
+window.onNativeSms = json => {
+  const msgs = JSON.parse(json), st = db.settings;
+  const maxD = msgs.reduce((m, x) => Math.max(m, x.d), 0);
+  const items = msgs.map(m => { const x = parseSMS(m.b, m.d); if (x) x.sender = m.a; return x; }).filter(Boolean);
+  if (smsMode === 'auto') {
+    const set = new Set(st.bankSenders || []);
+    const n = addExpenses(items.filter(x => set.has(x.sender)));
+    st.smsSince = Math.max(st.smsSince || 0, maxD); persist();
+    if (n) toast(`🔄 تم تسجيل ${n} عملية جديدة من رسائل البنك`);
+    return;
+  }
+  skipLockOnce = false;
+  if (!items.length) { alert('ما لقيت رسائل عمليات بنكية في آخر 90 يوم.'); return; }
+  pendingSmsSince = maxD;
+  showPreview(items, `لقيت ${items.length} عملية في رسائل آخر 90 يوم. اللي تحفظه، التطبيق بيسجّل رسائل نفس البنك لحاله كل ما تفتحه.`);
+};
+window.handleBack = () => {
+  if (isLocked()) return false;
+  const open = document.querySelector('dialog[open]');
+  if (open) { open.close(); return true; }
+  const active = document.querySelector('#tabs button.active');
+  if (active && active.dataset.tab !== 'home') { goTab('home'); return true; }
+  return false;
+};
 
 // ---------- البداية ----------
 loadLock();
@@ -1240,6 +1341,7 @@ if (!handleIncomingURL()) {
   try { const t = localStorage.getItem(KEY + '-tab'); if (t) goTab(t); } catch (e) {}
 }
 window.addEventListener('hashchange', handleIncomingURL);
+if (!lockCfg) autoSyncSms();
 
 // ---------- تطبيق قابل للتثبيت (PWA) ----------
 const appUrl = () => location.href.split('#')[0].split('?')[0];
@@ -1260,6 +1362,7 @@ async function installApp() {
   document.getElementById('installDlg').showModal();
 }
 async function shareApp() {
+  if (IS_APP) { AndroidApp.shareApp('تطبيق «دفتري» للأرقام والفواتير والمواعيد والمصروفات. افتح الملف المرفق وثبّته (أندرويد). بياناتك تبقى على جوالك.'); return; }
   const url = appUrl();
   if (location.protocol === 'file:') {
     alert('التطبيق مفتوح الحين كملف على جهازك. عشان تشاركه برابط لازم يكون مرفوع على الإنترنت، أو أرسل ملف index.html نفسه.');
@@ -1272,7 +1375,7 @@ async function shareApp() {
   try { await navigator.clipboard.writeText(url); toast('تم نسخ رابط التطبيق: ' + url); }
   catch (e) { prompt('انسخ رابط التطبيق:', url); }
 }
-if (location.protocol.startsWith('http')) {
+if (location.protocol.startsWith('http') && !IS_APP) {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   // على الآيفون لا يوجد زر تثبيت تلقائي؛ نُظهر الزر ليشرح الطريقة
