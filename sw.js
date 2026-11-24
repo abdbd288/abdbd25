@@ -1,5 +1,5 @@
 // يخزّن ملفات التطبيق ليعمل بدون إنترنت. غيّر VERSION عند كل تحديث.
-const VERSION = 'daftari-v3';
+const VERSION = 'daftari-v4';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-180.png'];
 
 self.addEventListener('install', e => {

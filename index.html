@@ -88,12 +88,30 @@
   #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
            padding: 10px 18px; border-radius: 12px; z-index: 50; max-width: calc(100vw - 32px); }
   details summary { cursor: pointer; }
+
+  /* شاشة القفل */
+  body.locked > header, body.locked > nav, body.locked > main, body.locked dialog { display: none !important; }
+  #lockScreen { position: fixed; inset: 0; z-index: 40; background: var(--bg); display: flex; flex-direction: column;
+                align-items: center; justify-content: center; gap: 14px; padding: 24px 16px; text-align: center; }
+  #lockScreen img { width: 72px; height: 72px; border-radius: 18px; }
+  #lockScreen h2 { margin: 0; font-size: 1.2rem; }
+  .dots { display: flex; gap: 14px; direction: ltr; height: 18px; }
+  .dots span { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--primary); }
+  .dots span.on { background: var(--primary); }
+  .dots.shake { animation: shake .4s; }
+  @keyframes shake { 25% { transform: translateX(-8px); } 50% { transform: translateX(8px); } 75% { transform: translateX(-4px); } }
+  .keypad { display: grid; grid-template-columns: repeat(3, 72px); gap: 14px; direction: ltr; }
+  .keypad button { height: 72px; border-radius: 50%; font-size: 1.5rem; padding: 0; }
+  .keypad button.ghost { border-color: transparent; background: transparent; font-size: 1.6rem; }
+  #lockMsg { min-height: 1.6em; color: var(--danger); font-size: .9rem; }
+  .linkbtn { border: none; background: none; color: var(--muted); text-decoration: underline; font-size: .85rem; }
 </style>
 </head>
 <body>
 <header>
   <h1>📒 دفتري</h1>
   <div class="row">
+    <button class="hbtn hidden" id="lockBtn" onclick="lockNow()" title="قفل الآن">🔒</button>
     <button class="hbtn hidden" id="installBtn" onclick="installApp()">📲 تثبيت</button>
     <button class="hbtn" onclick="shareApp()">↗ مشاركة</button>
   </div>
@@ -192,6 +210,17 @@
   <!-- الإعدادات -->
   <section id="tab-settings" class="hidden">
     <div class="card">
+      <h2 class="section" style="margin-top:0">🔐 قفل التطبيق</h2>
+      <p class="muted" id="lockStatus"></p>
+      <div class="row" id="lockBtns"></div>
+      <div id="lockTimeoutBox" class="hidden">
+        <label>القفل التلقائي بعد الخروج من التطبيق</label>
+        <select id="lockTimeout" style="width:auto" onchange="lockCfg.timeout = +this.value; saveLock()">
+          <option value="0">فوراً</option><option value="60">بعد دقيقة</option><option value="300">بعد 5 دقائق</option>
+        </select>
+      </div>
+    </div>
+    <div class="card">
       <h2 class="section" style="margin-top:0">🔒 خصوصيتك</h2>
       <p class="muted">كل بياناتك من أرقام وفواتير ومصروفات تنحفظ على جهازك وبس، وما ترسل لأي خادم. لما تشارك التطبيق مع أحد، يوصله التطبيق فاضي وهو يعبّيه ببياناته.</p>
       <div class="row">
@@ -278,6 +307,43 @@
     </div>
     <label>المكان</label><input name="place">
     <label>ملاحظات</label><textarea name="notes" rows="2"></textarea>
+    <div class="actions">
+      <button class="primary" type="submit">حفظ</button>
+      <button type="button" onclick="this.closest('dialog').close()">إلغاء</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- شاشة القفل -->
+<div id="lockScreen" class="hidden" role="dialog" aria-label="التطبيق مقفل">
+  <img src="icons/icon-192.png" alt="">
+  <h2>أدخل رمز القفل</h2>
+  <div class="dots" id="lockDots"></div>
+  <div id="lockMsg"></div>
+  <div class="keypad" id="keypad">
+    <button>1</button><button>2</button><button>3</button>
+    <button>4</button><button>5</button><button>6</button>
+    <button>7</button><button>8</button><button>9</button>
+    <button class="ghost" id="bioKey" data-k="bio" title="البصمة / Face ID">👆</button>
+    <button>0</button>
+    <button class="ghost" data-k="del" title="مسح">⌫</button>
+  </div>
+  <button class="linkbtn" onclick="forgotPin()">نسيت الرمز؟</button>
+</div>
+
+<!-- نافذة إعداد الرمز -->
+<dialog id="pinDlg">
+  <form onsubmit="return submitPin(event)">
+    <h2 id="pinTitle"></h2>
+    <div id="curPinBox"><label>الرمز الحالي</label>
+      <input name="cur" type="password" inputmode="numeric" autocomplete="off" dir="ltr"></div>
+    <div id="newPinBox">
+      <label>الرمز الجديد (من 4 إلى 6 أرقام)</label>
+      <input name="p1" type="password" inputmode="numeric" autocomplete="new-password" dir="ltr">
+      <label>أعد كتابة الرمز</label>
+      <input name="p2" type="password" inputmode="numeric" autocomplete="new-password" dir="ltr">
+    </div>
+    <p id="pinErr" style="color:var(--danger);min-height:1.4em;margin:8px 0 0"></p>
     <div class="actions">
       <button class="primary" type="submit">حفظ</button>
       <button type="button" onclick="this.closest('dialog').close()">إلغاء</button>
@@ -995,7 +1061,177 @@ function wipeAll() {
   db = { contacts: [], bills: [], events: [], expenses: [] }; persist();
 }
 
+// ---------- قفل التطبيق (رمز + بصمة/وجه) ----------
+const LOCK_KEY = KEY + '-lock';
+let lockCfg = null;        // { salt, hash, len, timeout, cred, fails, until }
+let pinBuf = '', bioBusy = false, hiddenAt = 0, pinMode = 'set';
+const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const isLocked = () => document.body.classList.contains('locked');
+
+function loadLock() { try { lockCfg = JSON.parse(localStorage.getItem(LOCK_KEY) || 'null'); } catch (e) { lockCfg = null; } }
+function saveLock() {
+  try { lockCfg ? localStorage.setItem(LOCK_KEY, JSON.stringify(lockCfg)) : localStorage.removeItem(LOCK_KEY); } catch (e) {}
+  renderLockSettings();
+}
+async function hashPin(pin, salt) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: unb64(salt), iterations: 150000, hash: 'SHA-256' }, key, 256);
+  return b64(bits);
+}
+async function checkPin(pin) { return !!lockCfg && (await hashPin(pin, lockCfg.salt)) === lockCfg.hash; }
+async function bioAvailable() {
+  try { return !!window.PublicKeyCredential && location.protocol !== 'file:' &&
+               await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }
+  catch (e) { return false; }
+}
+
+async function renderLockSettings() {
+  const on = !!lockCfg;
+  document.getElementById('lockBtn').classList.toggle('hidden', !on);
+  document.getElementById('lockTimeoutBox').classList.toggle('hidden', !on);
+  if (on) document.getElementById('lockTimeout').value = String(lockCfg.timeout ?? 60);
+  document.getElementById('lockStatus').textContent = on
+    ? `✅ القفل مفعّل برمز من ${lockCfg.len} أرقام${lockCfg.cred ? '، والبصمة أو Face ID مفعّلة' : ''}.`
+    : 'التطبيق يفتح بدون قفل. فعّل رمز عشان محد يفتح بياناتك من جوالك.';
+  const bio = on && await bioAvailable();
+  document.getElementById('lockBtns').innerHTML = on ? `
+      <button onclick="openPin('change')">تغيير الرمز</button>
+      ${bio ? (lockCfg.cred ? '<button onclick="disableBio()">إيقاف البصمة / Face ID</button>'
+                            : '<button class="primary" onclick="enableBio()">👆 تفعيل البصمة / Face ID</button>') : ''}
+      <button onclick="lockNow()">🔒 قفل الآن</button>
+      <button class="danger" onclick="openPin('remove')">إلغاء القفل</button>`
+    : '<button class="primary" onclick="openPin(\'set\')">🔐 تفعيل رمز القفل</button>';
+}
+
+function openPin(mode) {
+  if (!window.crypto || !crypto.subtle) { alert('هذا المتصفح لا يدعم القفل. افتح التطبيق من رابطه (https).'); return; }
+  pinMode = mode;
+  const dlg = document.getElementById('pinDlg'), f = dlg.querySelector('form');
+  f.reset(); document.getElementById('pinErr').textContent = '';
+  document.getElementById('pinTitle').textContent = { set: 'تفعيل رمز القفل', change: 'تغيير الرمز', remove: 'إلغاء القفل' }[mode];
+  document.getElementById('curPinBox').classList.toggle('hidden', mode === 'set');
+  document.getElementById('newPinBox').classList.toggle('hidden', mode === 'remove');
+  dlg.showModal();
+}
+async function submitPin(e) {
+  e.preventDefault();
+  const f = e.target, err = document.getElementById('pinErr');
+  const cur = normDigits(f.cur.value).trim(), p1 = normDigits(f.p1.value).trim(), p2 = normDigits(f.p2.value).trim();
+  if (pinMode !== 'set' && !(await checkPin(cur))) { err.textContent = 'الرمز الحالي غير صحيح'; return false; }
+  if (pinMode === 'remove') {
+    lockCfg = null; saveLock(); f.closest('dialog').close(); toast('تم إلغاء القفل'); return false;
+  }
+  if (!/^\d{4,6}$/.test(p1)) { err.textContent = 'الرمز لازم يكون من 4 إلى 6 أرقام'; return false; }
+  if (p1 !== p2) { err.textContent = 'الرمزان غير متطابقين'; return false; }
+  const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+  lockCfg = Object.assign({ timeout: 60 }, lockCfg || {}, { salt, hash: await hashPin(p1, salt), len: p1.length, fails: 0, until: 0 });
+  saveLock(); f.closest('dialog').close();
+  toast(pinMode === 'set' ? '🔐 تم تفعيل القفل' : 'تم تغيير الرمز');
+  if (pinMode === 'set' && await bioAvailable() && confirm('تبي تفتح التطبيق بالبصمة أو Face ID بعد؟')) enableBio();
+  return false;
+}
+
+async function enableBio() {
+  try {
+    bioBusy = true;
+    const cred = await navigator.credentials.create({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: 'دفتري' },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'daftari', displayName: 'دفتري' },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+      timeout: 60000,
+    }});
+    lockCfg.cred = b64(cred.rawId); saveLock(); toast('👆 تم تفعيل البصمة / Face ID');
+  } catch (e) { toast('لم يتم تفعيل البصمة'); }
+  finally { bioBusy = false; }
+}
+function disableBio() { delete lockCfg.cred; saveLock(); toast('تم إيقاف البصمة'); }
+async function bioUnlock() {
+  if (!lockCfg || !lockCfg.cred || bioBusy) return;
+  bioBusy = true;
+  try {
+    await navigator.credentials.get({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ type: 'public-key', id: unb64(lockCfg.cred) }],
+      userVerification: 'required', timeout: 60000,
+    }});
+    lockCfg.fails = 0; lockCfg.until = 0; saveLock(); unlock();
+  } catch (e) { /* أُلغي أو فشل — يبقى الرمز متاحاً */ }
+  finally { bioBusy = false; }
+}
+
+function lockNow() {
+  if (!lockCfg) return;
+  document.querySelectorAll('dialog[open]').forEach(d => d.close());
+  document.body.classList.add('locked');
+  document.getElementById('lockScreen').classList.remove('hidden');
+  document.getElementById('bioKey').style.visibility = lockCfg.cred ? 'visible' : 'hidden';
+  pinBuf = ''; drawDots(); showBlock();
+  if (lockCfg.cred && !document.hidden) setTimeout(bioUnlock, 250);
+}
+function unlock() {
+  document.body.classList.remove('locked');
+  document.getElementById('lockScreen').classList.add('hidden');
+  pinBuf = ''; render();
+}
+function drawDots(shake) {
+  const el = document.getElementById('lockDots');
+  el.innerHTML = Array.from({ length: lockCfg ? lockCfg.len : 4 }, (_, i) => `<span class="${i < pinBuf.length ? 'on' : ''}"></span>`).join('');
+  if (shake) { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); }
+}
+function showBlock() {
+  const left = Math.ceil(((lockCfg && lockCfg.until) || 0) - Date.now()) / 1000;
+  const msg = document.getElementById('lockMsg');
+  if (left > 0) { msg.textContent = `محاولات خاطئة كثيرة. انتظر ${Math.ceil(left)} ثانية`; setTimeout(showBlock, 1000); return true; }
+  if (msg.textContent.startsWith('محاولات')) msg.textContent = '';
+  return false;
+}
+async function pressKey(k) {
+  if (!isLocked() || !lockCfg) return;
+  if (k === 'bio') return bioUnlock();
+  if (k === 'del') { pinBuf = pinBuf.slice(0, -1); return drawDots(); }
+  if (showBlock() || pinBuf.length >= lockCfg.len) return;
+  pinBuf += k; drawDots();
+  if (pinBuf.length < lockCfg.len) return;
+  const ok = await checkPin(pinBuf);
+  if (ok) { lockCfg.fails = 0; lockCfg.until = 0; saveLock(); document.getElementById('lockMsg').textContent = ''; unlock(); return; }
+  lockCfg.fails = (lockCfg.fails || 0) + 1;
+  if (lockCfg.fails >= 5) lockCfg.until = Date.now() + Math.min(30000 * 2 ** (lockCfg.fails - 5), 15 * 60000);
+  saveLock();
+  pinBuf = ''; drawDots(true);
+  document.getElementById('lockMsg').textContent = 'رمز غير صحيح';
+  showBlock();
+}
+function forgotPin() {
+  if (!confirm('ما فيه طريقة تسترجع فيها الرمز، عشان تبقى بياناتك محمية.\n\nتقدر تمسح كل بيانات التطبيق من هذا الجهاز وتبدأ من جديد. وبعدها تقدر تسترجع نسخة احتياطية إذا كنت مصدّرها قبل.\n\nتبي تكمل؟')) return;
+  if (!confirm('تأكيد نهائي: بتنحذف كل الأرقام والفواتير والمواعيد والمصروفات اللي على هذا الجهاز.')) return;
+  db = { contacts: [], bills: [], events: [], expenses: [] };
+  try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) {}
+  lockCfg = null; saveLock(); unlock(); toast('تم مسح البيانات وإلغاء القفل');
+}
+document.getElementById('keypad').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (b) pressKey(b.dataset.k || b.textContent.trim());
+});
+document.addEventListener('keydown', e => {
+  if (!isLocked()) return;
+  const d = normDigits(e.key);
+  if (/^\d$/.test(d)) pressKey(d); else if (e.key === 'Backspace') pressKey('del');
+});
+document.addEventListener('visibilitychange', () => {
+  if (!lockCfg || bioBusy) return;
+  if (document.hidden) {
+    hiddenAt = Date.now();
+    if (!(lockCfg.timeout > 0)) lockNow();   // فوراً: نقفل قبل ما يلتقط الجوال صورة للتطبيق
+  } else if (!isLocked() && Date.now() - hiddenAt >= (lockCfg.timeout ?? 60) * 1000) lockNow();
+  else if (isLocked() && lockCfg.cred) setTimeout(bioUnlock, 250);
+});
+
 // ---------- البداية ----------
+loadLock();
+if (lockCfg) lockNow();
+renderLockSettings();
 load();
 fillCatSelects();
 render();
