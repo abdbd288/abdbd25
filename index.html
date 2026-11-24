@@ -147,6 +147,10 @@
   <!-- الرئيسية -->
   <section id="tab-home">
     <h2 id="hello" style="margin:4px 0 14px;font-size:1.3rem"></h2>
+    <div id="androidBanner" class="card row between hidden">
+      <span>🤖 جرّب تطبيق أندرويد: جلب الأرقام مباشرة وتسجيل رسائل البنك بالمشاركة</span>
+      <a class="btn small" href="dist/Daftari.apk" download="Daftari.apk" style="text-decoration:none">⬇️ تحميل</a>
+    </div>
     <div class="stats" id="stats"></div>
     <h2 class="section">⏰ قادم خلال 30 يوماً</h2>
     <div id="upcoming"></div>
@@ -341,6 +345,19 @@
 <div id="setupScreen" class="hidden">
   <div class="box">
     <img src="icons/icon-192.png" alt="">
+    <div id="iosNote" class="card hidden" style="text-align:start;margin-top:14px;border-color:var(--warn)">
+      <b>📲 ثبّت التطبيق أول</b>
+      <p class="muted" style="margin:6px 0 0">عشان يصير تطبيق على جوالك وتنحفظ بياناتك فيه:<br>
+        1. اضغط زر المشاركة <b>⬆︎</b> تحت في Safari.<br>
+        2. اختر <b>«إضافة إلى الشاشة الرئيسية»</b> ثم <b>«إضافة»</b>.<br>
+        3. افتح «دفتري» من الشاشة الرئيسية وكمّل التسجيل هناك.</p>
+      <p class="muted" style="margin:6px 0 0;font-size:.82rem">بيانات التطبيق المثبّت منفصلة عن Safari، فسجّل من التطبيق المثبّت عشان ما تضيع.</p>
+    </div>
+    <div id="androidNote" class="card hidden" style="text-align:start;margin-top:14px">
+      <b>🤖 عندك أندرويد؟</b>
+      <p class="muted" style="margin:6px 0 8px">حمّل تطبيق أندرويد، فيه مزايا زيادة: جلب الأرقام مباشرة، وتسجيل رسائل البنك بالمشاركة.</p>
+      <a class="btn" href="dist/Daftari.apk" download="Daftari.apk" style="display:inline-block;text-decoration:none">⬇️ تحميل تطبيق أندرويد</a>
+    </div>
     <div id="stepName">
       <h2>أهلاً بك في دفتري 👋</h2>
       <p class="muted">أرقامك وفواتيرك ومواعيدك ومصروفاتك في مكان واحد، وكلها على جوالك.</p>
@@ -417,7 +434,7 @@
   <form method="dialog">
     <h2>📲 تثبيت «دفتري» على جوالك</h2>
     <p><b>آيفون (Safari):</b> اضغط زر المشاركة <b>⬆︎</b> تحت، واختر <b>«إضافة إلى الشاشة الرئيسية»</b>، وبعدها <b>«إضافة»</b>.</p>
-    <p><b>أندرويد (Chrome):</b> اضغط القائمة <b>⋮</b> فوق، واختر <b>«تثبيت التطبيق»</b> أو <b>«إضافة إلى الشاشة الرئيسية»</b>.</p>
+    <p><b>أندرويد:</b> الأفضل تحمّل <a href="dist/Daftari.apk" download="Daftari.apk">تطبيق أندرويد</a> وتثبّته. أو من Chrome اضغط القائمة <b>⋮</b> فوق، واختر <b>«تثبيت التطبيق»</b>.</p>
     <p><b>الكمبيوتر (Chrome أو Edge):</b> اضغط أيقونة التثبيت في شريط العنوان.</p>
     <p class="muted">بعد التثبيت يفتح مثل أي تطبيق، ويشتغل حتى بدون إنترنت.</p>
     <div class="actions"><button class="primary">تمام</button></div>
@@ -1538,9 +1555,17 @@ async function shareApp() {
 if (location.protocol.startsWith('http') && !IS_APP) {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  // على الآيفون لا يوجد زر تثبيت تلقائي؛ نُظهر الزر ليشرح الطريقة
-  if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !isStandalone())
+  // على الآيفون لا يوجد زر تثبيت تلقائي؛ نُظهر الزر ونطلب التثبيت قبل التسجيل
+  const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (iOS && !isStandalone()) {
     document.getElementById('installBtn').classList.remove('hidden');
+    document.getElementById('iosNote').classList.remove('hidden');
+  }
+  // على متصفح أندرويد نعرض تحميل التطبيق
+  if (/android/i.test(navigator.userAgent) && !isStandalone()) {
+    document.getElementById('androidNote').classList.remove('hidden');
+    document.getElementById('androidBanner').classList.remove('hidden');
+  }
 }
 </script>
 </body>
