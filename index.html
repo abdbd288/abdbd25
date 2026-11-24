@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>دفتري</title>
+<meta name="theme-color" content="#0f766e">
+<style>
+  :root {
+    --bg: #f5f7f8; --card: #ffffff; --text: #1f2937; --muted: #6b7280;
+    --line: #e5e7eb; --primary: #0f766e; --primary-soft: #ccfbf1;
+    --danger: #b91c1c; --danger-soft: #fee2e2; --warn: #b45309; --warn-soft: #fef3c7;
+    --ok: #15803d; --ok-soft: #dcfce7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1416; --card: #182024; --text: #e5e7eb; --muted: #9ca3af;
+      --line: #2a3439; --primary: #2dd4bf; --primary-soft: #134e4a;
+      --danger: #f87171; --danger-soft: #451a1a; --warn: #fbbf24; --warn-soft: #422c06;
+      --ok: #4ade80; --ok-soft: #12321f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", sans-serif;
+         background: var(--bg); color: var(--text); line-height: 1.6; }
+  header { background: var(--primary); color: #fff; padding: 14px 16px; position: sticky; top: 0; z-index: 5; }
+  @media (prefers-color-scheme: dark) { header { color: #04201d; } }
+  header h1 { margin: 0; font-size: 1.25rem; }
+  nav { display: flex; gap: 6px; padding: 10px 16px; overflow-x: auto; background: var(--card);
+        border-bottom: 1px solid var(--line); position: sticky; top: 52px; z-index: 4; }
+  nav button { flex: 0 0 auto; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; }
+  button, .btn { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text);
+           padding: 8px 14px; border-radius: 10px; cursor: pointer; }
+  button.active, button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  @media (prefers-color-scheme: dark) { button.active, button.primary { color: #04201d; } }
+  button.danger { color: var(--danger); }
+  button.small { padding: 4px 10px; font-size: .85rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .between { justify-content: space-between; }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .8rem;
+          background: var(--primary-soft); color: var(--primary); }
+  .pill.danger { background: var(--danger-soft); color: var(--danger); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  input, select, textarea { font: inherit; width: 100%; padding: 9px 12px; border-radius: 10px;
+          border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  label { display: block; margin: 8px 0 4px; font-size: .9rem; color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .toolbar input { flex: 1 1 200px; width: auto; }
+  .toolbar select { width: auto; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .stat b { display: block; font-size: 1.6rem; }
+  .empty { text-align: center; color: var(--muted); padding: 30px 10px; }
+  a.tel { color: var(--primary); text-decoration: none; direction: ltr; unicode-bidi: embed; font-weight: 600; }
+  dialog { border: none; border-radius: 16px; padding: 0; width: min(520px, calc(100vw - 32px));
+           background: var(--card); color: var(--text); }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog form { padding: 18px; }
+  dialog h2 { margin: 0 0 6px; font-size: 1.15rem; }
+  .actions { display: flex; gap: 8px; justify-content: flex-start; margin-top: 16px; }
+  h2.section { font-size: 1.05rem; margin: 18px 0 10px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header><h1>📒 دفتري</h1></header>
+<nav id="tabs">
+  <button data-tab="home" class="active">الرئيسية</button>
+  <button data-tab="contacts">جهات الاتصال</button>
+  <button data-tab="bills">الفواتير</button>
+  <button data-tab="events">المواعيد والتواريخ</button>
+  <button data-tab="settings">النسخ الاحتياطي</button>
+</nav>
+
+<main>
+  <!-- الرئيسية -->
+  <section id="tab-home">
+    <div class="stats" id="stats"></div>
+    <h2 class="section">⏰ قادم خلال 30 يوماً</h2>
+    <div id="upcoming"></div>
+  </section>
+
+  <!-- جهات الاتصال -->
+  <section id="tab-contacts" class="hidden">
+    <div class="toolbar">
+      <input id="contactSearch" type="search" placeholder="ابحث بالاسم أو الرقم">
+      <select id="contactFilter">
+        <option value="">الكل</option>
+        <option>العائلة</option><option>الأصدقاء</option><option>الزملاء</option>
+      </select>
+      <button class="primary" onclick="openContact()">+ إضافة رقم</button>
+    </div>
+    <div id="contactList"></div>
+  </section>
+
+  <!-- الفواتير -->
+  <section id="tab-bills" class="hidden">
+    <div class="toolbar">
+      <input id="billSearch" type="search" placeholder="ابحث في الفواتير">
+      <select id="billFilter">
+        <option value="">الكل</option>
+        <option value="unpaid">غير مدفوعة</option>
+        <option value="paid">مدفوعة</option>
+      </select>
+      <button class="primary" onclick="openBill()">+ إضافة فاتورة</button>
+    </div>
+    <div id="billList"></div>
+  </section>
+
+  <!-- المواعيد -->
+  <section id="tab-events" class="hidden">
+    <div class="toolbar">
+      <input id="eventSearch" type="search" placeholder="ابحث في المواعيد">
+      <select id="eventFilter">
+        <option value="">الكل</option>
+        <option>موعد</option><option>مناسبة</option><option>عيد ميلاد</option><option>تذكير</option>
+      </select>
+      <button class="primary" onclick="openEvent()">+ إضافة موعد</button>
+    </div>
+    <div id="eventList"></div>
+  </section>
+
+  <!-- الإعدادات -->
+  <section id="tab-settings" class="hidden">
+    <div class="card">
+      <h2 class="section" style="margin-top:0">النسخ الاحتياطي</h2>
+      <p class="muted">بياناتك محفوظة على هذا الجهاز فقط داخل المتصفح. صدّر نسخة احتياطية بانتظام، ويمكنك استيرادها على جهاز آخر.</p>
+      <div class="row">
+        <button class="primary" onclick="exportData()">⬇️ تصدير نسخة احتياطية</button>
+        <label class="btn" style="margin:0;color:var(--text)">⬆️ استيراد نسخة
+          <input type="file" accept="application/json" class="hidden" onchange="importData(this)">
+        </label>
+      </div>
+    </div>
+    <div class="card">
+      <h2 class="section" style="margin-top:0">مسح البيانات</h2>
+      <p class="muted">يحذف كل جهات الاتصال والفواتير والمواعيد من هذا الجهاز.</p>
+      <button class="danger" onclick="wipeAll()">🗑️ حذف كل البيانات</button>
+    </div>
+  </section>
+</main>
+
+<!-- نافذة جهة اتصال -->
+<dialog id="contactDlg">
+  <form method="dialog" onsubmit="return saveContact(event)">
+    <h2 id="contactTitle">إضافة رقم</h2>
+    <input type="hidden" name="id">
+    <label>الاسم *</label><input name="name" required>
+    <div class="grid2">
+      <div><label>رقم الجوال *</label><input name="phone" type="tel" dir="ltr" required></div>
+      <div><label>التصنيف</label>
+        <select name="group"><option>العائلة</option><option>الأصدقاء</option><option>الزملاء</option></select></div>
+      <div><label>رقم آخر</label><input name="phone2" type="tel" dir="ltr"></div>
+      <div><label>تاريخ الميلاد</label><input name="birthday" type="date"></div>
+    </div>
+    <label>ملاحظات</label><textarea name="notes" rows="2"></textarea>
+    <div class="actions">
+      <button class="primary" type="submit">حفظ</button>
+      <button type="button" onclick="this.closest('dialog').close()">إلغاء</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- نافذة فاتورة -->
+<dialog id="billDlg">
+  <form method="dialog" onsubmit="return saveBill(event)">
+    <h2 id="billTitle">إضافة فاتورة</h2>
+    <input type="hidden" name="id">
+    <label>اسم الفاتورة / الجهة *</label><input name="title" required placeholder="مثال: الكهرباء، الإنترنت، الإيجار">
+    <div class="grid2">
+      <div><label>المبلغ (ر.س)</label><input name="amount" type="number" step="0.01" min="0" dir="ltr"></div>
+      <div><label>تاريخ الاستحقاق</label><input name="due" type="date"></div>
+      <div><label>التكرار</label>
+        <select name="repeat">
+          <option value="">مرة واحدة</option><option value="monthly">شهرية</option><option value="yearly">سنوية</option>
+        </select></div>
+      <div><label>رقم الفاتورة / الحساب</label><input name="ref" dir="ltr"></div>
+    </div>
+    <label><input type="checkbox" name="paid" style="width:auto"> مدفوعة</label>
+    <label>ملاحظات</label><textarea name="notes" rows="2"></textarea>
+    <div class="actions">
+      <button class="primary" type="submit">حفظ</button>
+      <button type="button" onclick="this.closest('dialog').close()">إلغاء</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- نافذة موعد -->
+<dialog id="eventDlg">
+  <form method="dialog" onsubmit="return saveEvent(event)">
+    <h2 id="eventTitle">إضافة موعد</h2>
+    <input type="hidden" name="id">
+    <label>العنوان *</label><input name="title" required placeholder="مثال: موعد المستشفى، تجديد الإقامة">
+    <div class="grid2">
+      <div><label>التاريخ *</label><input name="date" type="date" required></div>
+      <div><label>الوقت</label><input name="time" type="time"></div>
+      <div><label>النوع</label>
+        <select name="type"><option>موعد</option><option>مناسبة</option><option>عيد ميلاد</option><option>تذكير</option></select></div>
+      <div><label>يتكرر سنوياً</label>
+        <select name="yearly"><option value="">لا</option><option value="1">نعم</option></select></div>
+    </div>
+    <label>المكان</label><input name="place">
+    <label>ملاحظات</label><textarea name="notes" rows="2"></textarea>
+    <div class="actions">
+      <button class="primary" type="submit">حفظ</button>
+      <button type="button" onclick="this.closest('dialog').close()">إلغاء</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const KEY = 'daftari-data-v1';
+let db = { contacts: [], bills: [], events: [] };
+
+function load() {
+  try { const raw = localStorage.getItem(KEY); if (raw) db = Object.assign(db, JSON.parse(raw)); } catch (e) {}
+}
+function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify(db)); }
+  catch (e) { alert('تعذّر الحفظ على هذا الجهاز. صدّر نسخة احتياطية.'); }
+  render();
+}
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ---------- التواريخ ----------
+function today() { const d = new Date(); d.setHours(0,0,0,0); return d; }
+function parseDate(s) { if (!s) return null; const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
+function toISO(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function daysUntil(d) { return Math.round((d - today()) / 86400000); }
+function nextYearly(s) { // أقرب تكرار سنوي قادم
+  const d = parseDate(s); if (!d) return null;
+  const t = today(); const n = new Date(t.getFullYear(), d.getMonth(), d.getDate());
+  if (n < t) n.setFullYear(t.getFullYear() + 1);
+  return n;
+}
+function fmtDate(d) {
+  if (!d) return '';
+  return d.toLocaleDateString('ar-SA-u-ca-gregory', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+function fmtHijri(d) {
+  try { return d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { year: 'numeric', month: 'long', day: 'numeric' }); }
+  catch (e) { return ''; }
+}
+function relLabel(n) {
+  if (n === 0) return ['اليوم', 'danger'];
+  if (n === 1) return ['غداً', 'warn'];
+  if (n < 0) return ['متأخر ' + (-n) + ' يوم', 'danger'];
+  if (n <= 7) return ['بعد ' + n + ' أيام', 'warn'];
+  return ['بعد ' + n + ' يوم', ''];
+}
+const money = n => (Number(n) || 0).toLocaleString('ar-SA', { maximumFractionDigits: 2 }) + ' ر.س';
+
+// ---------- التبويبات ----------
+document.getElementById('tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('main > section').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + b.dataset.tab));
+  try { localStorage.setItem(KEY + '-tab', b.dataset.tab); } catch (e) {}
+});
+['contactSearch','contactFilter','billSearch','billFilter','eventSearch','eventFilter']
+  .forEach(id => document.getElementById(id).addEventListener('input', render));
+
+// ---------- النماذج ----------
+function fillForm(form, obj) {
+  form.reset();
+  for (const el of form.elements) {
+    if (!el.name) continue;
+    if (el.type === 'checkbox') el.checked = !!obj[el.name];
+    else el.value = obj[el.name] ?? (el.tagName === 'SELECT' ? el.options[0].value : '');
+  }
+}
+function readForm(form) {
+  const o = {};
+  for (const el of form.elements) {
+    if (!el.name) continue;
+    o[el.name] = el.type === 'checkbox' ? el.checked : el.value.trim();
+  }
+  if (!o.id) o.id = uid();
+  return o;
+}
+function upsert(list, item) {
+  const i = list.findIndex(x => x.id === item.id);
+  if (i >= 0) list[i] = item; else list.push(item);
+}
+function removeItem(kind, id) {
+  if (!confirm('هل تريد الحذف؟')) return;
+  db[kind] = db[kind].filter(x => x.id !== id); persist();
+}
+
+function openContact(id) {
+  const dlg = document.getElementById('contactDlg');
+  const c = db.contacts.find(x => x.id === id) || { group: document.getElementById('contactFilter').value || 'العائلة' };
+  document.getElementById('contactTitle').textContent = id ? 'تعديل جهة اتصال' : 'إضافة رقم';
+  fillForm(dlg.querySelector('form'), c); dlg.showModal();
+}
+function saveContact(e) { e.preventDefault(); upsert(db.contacts, readForm(e.target)); e.target.closest('dialog').close(); persist(); return false; }
+
+function openBill(id) {
+  const dlg = document.getElementById('billDlg');
+  const b = db.bills.find(x => x.id === id) || {};
+  document.getElementById('billTitle').textContent = id ? 'تعديل فاتورة' : 'إضافة فاتورة';
+  fillForm(dlg.querySelector('form'), b); dlg.showModal();
+}
+function saveBill(e) { e.preventDefault(); upsert(db.bills, readForm(e.target)); e.target.closest('dialog').close(); persist(); return false; }
+function togglePaid(id) {
+  const b = db.bills.find(x => x.id === id); if (!b) return;
+  if (!b.paid && b.repeat && b.due) {
+    // الفاتورة المتكررة: سجّل الدفع وانقل الاستحقاق للفترة التالية
+    const d = parseDate(b.due);
+    if (b.repeat === 'monthly') d.setMonth(d.getMonth() + 1); else d.setFullYear(d.getFullYear() + 1);
+    b.history = b.history || [];
+    b.history.push({ due: b.due, amount: b.amount, paidOn: toISO(today()) });
+    b.due = toISO(d);
+  } else b.paid = !b.paid;
+  persist();
+}
+
+function openEvent(id) {
+  const dlg = document.getElementById('eventDlg');
+  const ev = db.events.find(x => x.id === id) || { date: toISO(today()) };
+  document.getElementById('eventTitle').textContent = id ? 'تعديل موعد' : 'إضافة موعد';
+  fillForm(dlg.querySelector('form'), ev); dlg.showModal();
+}
+function saveEvent(e) { e.preventDefault(); upsert(db.events, readForm(e.target)); e.target.closest('dialog').close(); persist(); return false; }
+
+// ---------- العرض ----------
+function eventDate(ev) { return ev.yearly ? nextYearly(ev.date) : parseDate(ev.date); }
+const groupIcon = { 'العائلة': '👨‍👩‍👧', 'الأصدقاء': '🤝', 'الزملاء': '💼' };
+
+function renderContacts() {
+  const q = document.getElementById('contactSearch').value.trim().toLowerCase();
+  const f = document.getElementById('contactFilter').value;
+  const list = db.contacts
+    .filter(c => (!f || c.group === f) && (!q || (c.name + ' ' + c.phone + ' ' + c.phone2 + ' ' + c.notes).toLowerCase().includes(q)))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  const el = document.getElementById('contactList');
+  if (!list.length) { el.innerHTML = '<div class="empty">لا توجد أرقام بعد. اضغط «إضافة رقم».</div>'; return; }
+  el.innerHTML = list.map(c => `
+    <div class="card">
+      <div class="row between">
+        <div><b>${esc(c.name)}</b> <span class="pill">${groupIcon[c.group] || ''} ${esc(c.group)}</span></div>
+        <div class="row">
+          <button class="small" onclick="openContact('${c.id}')">تعديل</button>
+          <button class="small danger" onclick="removeItem('contacts','${c.id}')">حذف</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:6px">
+        📞 <a class="tel" href="tel:${esc(c.phone)}">${esc(c.phone)}</a>
+        ${c.phone2 ? `· <a class="tel" href="tel:${esc(c.phone2)}">${esc(c.phone2)}</a>` : ''}
+        <a class="btn small" href="https://wa.me/${esc(c.phone.replace(/[^\d]/g, '').replace(/^0(?=5)/, '966'))}" target="_blank" rel="noopener">واتساب</a>
+      </div>
+      ${c.birthday ? `<div class="muted">🎂 ${fmtDate(parseDate(c.birthday))}</div>` : ''}
+      ${c.notes ? `<div class="muted">${esc(c.notes)}</div>` : ''}
+    </div>`).join('');
+}
+
+function renderBills() {
+  const q = document.getElementById('billSearch').value.trim().toLowerCase();
+  const f = document.getElementById('billFilter').value;
+  const list = db.bills
+    .filter(b => (!f || (f === 'paid') === !!b.paid) && (!q || (b.title + ' ' + b.ref + ' ' + b.notes).toLowerCase().includes(q)))
+    .sort((a, b) => (!!a.paid - !!b.paid) || String(a.due || '9').localeCompare(String(b.due || '9')));
+  const el = document.getElementById('billList');
+  if (!list.length) { el.innerHTML = '<div class="empty">لا توجد فواتير. اضغط «إضافة فاتورة».</div>'; return; }
+  el.innerHTML = list.map(b => {
+    const d = parseDate(b.due);
+    let status = b.paid ? ['مدفوعة', 'ok'] : d ? relLabel(daysUntil(d)) : ['بدون تاريخ', ''];
+    const rep = b.repeat === 'monthly' ? 'شهرية' : b.repeat === 'yearly' ? 'سنوية' : '';
+    return `
+    <div class="card">
+      <div class="row between">
+        <div><b>${esc(b.title)}</b> <span class="pill ${status[1]}">${status[0]}</span> ${rep ? `<span class="pill">${rep}</span>` : ''}</div>
+        <b>${b.amount ? money(b.amount) : ''}</b>
+      </div>
+      ${d ? `<div class="muted">الاستحقاق: ${fmtDate(d)}</div>` : ''}
+      ${b.ref ? `<div class="muted">الرقم: <span dir="ltr">${esc(b.ref)}</span></div>` : ''}
+      ${b.notes ? `<div class="muted">${esc(b.notes)}</div>` : ''}
+      ${b.history && b.history.length ? `<div class="muted">آخر دفعة: ${esc(b.history[b.history.length-1].paidOn)} (${b.history.length} دفعة مسجّلة)</div>` : ''}
+      <div class="row" style="margin-top:8px">
+        <button class="small ${b.paid ? '' : 'primary'}" onclick="togglePaid('${b.id}')">${b.paid ? 'إلغاء الدفع' : '✔ تم الدفع'}</button>
+        <button class="small" onclick="openBill('${b.id}')">تعديل</button>
+        <button class="small danger" onclick="removeItem('bills','${b.id}')">حذف</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderEvents() {
+  const q = document.getElementById('eventSearch').value.trim().toLowerCase();
+  const f = document.getElementById('eventFilter').value;
+  const list = db.events
+    .filter(ev => (!f || ev.type === f) && (!q || (ev.title + ' ' + ev.place + ' ' + ev.notes).toLowerCase().includes(q)))
+    .map(ev => ({ ev, d: eventDate(ev) }))
+    .sort((a, b) => {
+      const pa = daysUntil(a.d) < 0, pb = daysUntil(b.d) < 0;
+      if (pa !== pb) return pa - pb;              // القادمة أولاً
+      return pa ? b.d - a.d : a.d - b.d;
+    });
+  const el = document.getElementById('eventList');
+  if (!list.length) { el.innerHTML = '<div class="empty">لا توجد مواعيد. اضغط «إضافة موعد».</div>'; return; }
+  el.innerHTML = list.map(({ ev, d }) => {
+    const n = daysUntil(d);
+    const st = n < 0 ? ['انتهى', ''] : relLabel(n);
+    return `
+    <div class="card" style="${n < 0 ? 'opacity:.6' : ''}">
+      <div class="row between">
+        <div><b>${esc(ev.title)}</b> <span class="pill">${esc(ev.type)}</span> <span class="pill ${st[1]}">${st[0]}</span></div>
+        <div class="row">
+          <button class="small" onclick="openEvent('${ev.id}')">تعديل</button>
+          <button class="small danger" onclick="removeItem('events','${ev.id}')">حذف</button>
+        </div>
+      </div>
+      <div class="muted">📅 ${fmtDate(d)}${ev.time ? ' — 🕒 ' + esc(ev.time) : ''}${ev.yearly ? ' — يتكرر سنوياً' : ''}</div>
+      <div class="muted">الهجري: ${fmtHijri(d)}</div>
+      ${ev.place ? `<div class="muted">📍 ${esc(ev.place)}</div>` : ''}
+      ${ev.notes ? `<div class="muted">${esc(ev.notes)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderHome() {
+  const unpaid = db.bills.filter(b => !b.paid);
+  const total = unpaid.reduce((s, b) => s + (Number(b.amount) || 0), 0);
+  const items = [];
+  db.events.forEach(ev => { const d = eventDate(ev); items.push({ d, icon: '📅', title: ev.title, sub: ev.type + (ev.time ? ' — ' + ev.time : ''), tab: 'events' }); });
+  unpaid.forEach(b => { const d = parseDate(b.due); if (d) items.push({ d, icon: '🧾', title: 'فاتورة: ' + b.title, sub: b.amount ? money(b.amount) : '', tab: 'bills', overdue: true }); });
+  db.contacts.forEach(c => { if (c.birthday) items.push({ d: nextYearly(c.birthday), icon: '🎂', title: 'عيد ميلاد ' + c.name, sub: c.group, tab: 'contacts' }); });
+  const up = items.filter(i => { const n = daysUntil(i.d); return n <= 30 && (n >= 0 || i.overdue); }).sort((a, b) => a.d - b.d);
+
+  document.getElementById('stats').innerHTML = `
+    <div class="card stat"><span class="muted">جهات الاتصال</span><b>${db.contacts.length}</b></div>
+    <div class="card stat"><span class="muted">فواتير غير مدفوعة</span><b>${unpaid.length}</b></div>
+    <div class="card stat"><span class="muted">المبلغ المستحق</span><b>${money(total)}</b></div>
+    <div class="card stat"><span class="muted">مواعيد قادمة</span><b>${db.events.filter(e => daysUntil(eventDate(e)) >= 0).length}</b></div>`;
+  document.getElementById('upcoming').innerHTML = up.length ? up.map(i => {
+    const [lbl, cls] = relLabel(daysUntil(i.d));
+    return `<div class="card row between" style="cursor:pointer" onclick="document.querySelector('[data-tab=${i.tab}]').click()">
+      <div>${i.icon} <b>${esc(i.title)}</b><div class="muted">${fmtDate(i.d)}${i.sub ? ' — ' + esc(i.sub) : ''}</div></div>
+      <span class="pill ${cls}">${lbl}</span></div>`;
+  }).join('') : '<div class="empty">لا يوجد شيء خلال الثلاثين يوماً القادمة 🌿</div>';
+}
+
+function render() { renderHome(); renderContacts(); renderBills(); renderEvents(); }
+
+// ---------- النسخ الاحتياطي ----------
+function exportData() {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'daftari-backup-' + toISO(today()) + '.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function importData(input) {
+  const file = input.files[0]; if (!file) return;
+  file.text().then(t => {
+    const data = JSON.parse(t);
+    if (!data || !Array.isArray(data.contacts)) throw new Error();
+    if (!confirm('سيتم استبدال البيانات الحالية بالنسخة المستوردة. متابعة؟')) return;
+    db = { contacts: data.contacts || [], bills: data.bills || [], events: data.events || [] };
+    persist(); alert('تم الاستيراد بنجاح');
+  }).catch(() => alert('الملف غير صالح')).finally(() => input.value = '');
+}
+function wipeAll() {
+  if (!confirm('سيتم حذف كل البيانات نهائياً. هل أنت متأكد؟')) return;
+  db = { contacts: [], bills: [], events: [] }; persist();
+}
+
+// ---------- البداية ----------
+load();
+render();
+try { const t = localStorage.getItem(KEY + '-tab'); if (t) document.querySelector(`[data-tab="${t}"]`)?.click(); } catch (e) {}
+</script>
+</body>
+</html>
