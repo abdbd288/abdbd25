@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>دفتري</title>
 <meta name="theme-color" content="#0f766e">
+<meta name="description" content="أرقام العائلة والأصدقاء والزملاء، الفواتير، المواعيد، والمصروفات — كلها على جهازك.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="دفتري">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>
   :root {
     --bg: #f5f7f8; --card: #ffffff; --text: #1f2937; --muted: #6b7280;
@@ -26,8 +34,12 @@
   header { background: var(--primary); color: #fff; padding: 14px 16px; position: sticky; top: 0; z-index: 5; }
   @media (prefers-color-scheme: dark) { header { color: #04201d; } }
   header h1 { margin: 0; font-size: 1.25rem; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+           padding-top: calc(14px + env(safe-area-inset-top)); height: calc(62px + env(safe-area-inset-top)); }
+  header .hbtn { background: rgba(255,255,255,.18); color: inherit; border: 1px solid rgba(255,255,255,.35);
+                 padding: 5px 12px; font-size: .9rem; }
   nav { display: flex; gap: 6px; padding: 10px 16px; overflow-x: auto; background: var(--card);
-        border-bottom: 1px solid var(--line); position: sticky; top: 52px; z-index: 4; }
+        border-bottom: 1px solid var(--line); position: sticky; top: calc(62px + env(safe-area-inset-top)); z-index: 4; }
   nav button { flex: 0 0 auto; }
   main { max-width: 860px; margin: 0 auto; padding: 16px; }
   button, .btn { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text);
@@ -79,7 +91,13 @@
 </style>
 </head>
 <body>
-<header><h1>📒 دفتري</h1></header>
+<header>
+  <h1>📒 دفتري</h1>
+  <div class="row">
+    <button class="hbtn hidden" id="installBtn" onclick="installApp()">📲 تثبيت</button>
+    <button class="hbtn" onclick="shareApp()">↗ مشاركة</button>
+  </div>
+</header>
 <nav id="tabs">
   <button data-tab="home" class="active">الرئيسية</button>
   <button data-tab="contacts">جهات الاتصال</button>
@@ -154,6 +172,7 @@
           <code dir="ltr" id="autoUrl" style="word-break:break-all"></code></li>
       </ol>
       <p><b>أندرويد:</b> تطبيق MacroDroid أو Tasker يسوي نفس الشي: عند وصول SMS من البنك يفتح الرابط نفسه.</p>
+      <p class="muted">⚠️ في الآيفون، التطبيق المثبّت على الشاشة الرئيسية بياناته منفصلة عن Safari، والأتمتة تفتح Safari. فإذا بتستخدم الأتمتة، استخدم التطبيق من Safari.</p>
     </details>
   </section>
 
@@ -172,6 +191,14 @@
 
   <!-- الإعدادات -->
   <section id="tab-settings" class="hidden">
+    <div class="card">
+      <h2 class="section" style="margin-top:0">🔒 خصوصيتك</h2>
+      <p class="muted">كل بياناتك من أرقام وفواتير ومصروفات تنحفظ على جهازك وبس، وما ترسل لأي خادم. لما تشارك التطبيق مع أحد، يوصله التطبيق فاضي وهو يعبّيه ببياناته.</p>
+      <div class="row">
+        <button class="primary" onclick="shareApp()">↗ شارك التطبيق</button>
+        <button onclick="installApp()">📲 تثبيت على الشاشة الرئيسية</button>
+      </div>
+    </div>
     <div class="card">
       <h2 class="section" style="margin-top:0">النسخ الاحتياطي</h2>
       <p class="muted">بياناتك محفوظة على هذا الجهاز فقط داخل المتصفح. صدّر نسخة احتياطية بانتظام، ويمكنك استيرادها على جهاز آخر.</p>
@@ -255,6 +282,18 @@
       <button class="primary" type="submit">حفظ</button>
       <button type="button" onclick="this.closest('dialog').close()">إلغاء</button>
     </div>
+  </form>
+</dialog>
+
+<!-- نافذة طريقة التثبيت -->
+<dialog id="installDlg">
+  <form method="dialog">
+    <h2>📲 تثبيت «دفتري» على جوالك</h2>
+    <p><b>آيفون (Safari):</b> اضغط زر المشاركة <b>⬆︎</b> تحت، واختر <b>«إضافة إلى الشاشة الرئيسية»</b>، وبعدها <b>«إضافة»</b>.</p>
+    <p><b>أندرويد (Chrome):</b> اضغط القائمة <b>⋮</b> فوق، واختر <b>«تثبيت التطبيق»</b> أو <b>«إضافة إلى الشاشة الرئيسية»</b>.</p>
+    <p><b>الكمبيوتر (Chrome أو Edge):</b> اضغط أيقونة التثبيت في شريط العنوان.</p>
+    <p class="muted">بعد التثبيت يفتح مثل أي تطبيق، ويشتغل حتى بدون إنترنت.</p>
+    <div class="actions"><button class="primary">تمام</button></div>
   </form>
 </dialog>
 
@@ -965,6 +1004,45 @@ if (!handleIncomingURL()) {
   try { const t = localStorage.getItem(KEY + '-tab'); if (t) goTab(t); } catch (e) {}
 }
 window.addEventListener('hashchange', handleIncomingURL);
+
+// ---------- تطبيق قابل للتثبيت (PWA) ----------
+const appUrl = () => location.href.split('#')[0].split('?')[0];
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); installPrompt = e;
+  document.getElementById('installBtn').classList.remove('hidden');
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null; document.getElementById('installBtn').classList.add('hidden');
+  toast('✅ تم تثبيت التطبيق');
+});
+async function installApp() {
+  if (isStandalone()) { toast('التطبيق مثبّت عندك 👍'); return; }
+  if (installPrompt) { installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null;
+                       document.getElementById('installBtn').classList.add('hidden'); return; }
+  document.getElementById('installDlg').showModal();
+}
+async function shareApp() {
+  const url = appUrl();
+  if (location.protocol === 'file:') {
+    alert('التطبيق مفتوح الحين كملف على جهازك. عشان تشاركه برابط لازم يكون مرفوع على الإنترنت، أو أرسل ملف index.html نفسه.');
+    return;
+  }
+  const data = { title: 'دفتري', text: 'تطبيق «دفتري» للأرقام والفواتير والمواعيد والمصروفات. بياناتك تبقى على جوالك:', url };
+  try {
+    if (navigator.share) { await navigator.share(data); return; }
+  } catch (e) { if (e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(url); toast('تم نسخ رابط التطبيق: ' + url); }
+  catch (e) { prompt('انسخ رابط التطبيق:', url); }
+}
+if (location.protocol.startsWith('http')) {
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  // على الآيفون لا يوجد زر تثبيت تلقائي؛ نُظهر الزر ليشرح الطريقة
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !isStandalone())
+    document.getElementById('installBtn').classList.remove('hidden');
+}
 </script>
 </body>
 </html>
