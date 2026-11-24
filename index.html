@@ -104,6 +104,23 @@
   .keypad button { height: 72px; border-radius: 50%; font-size: 1.5rem; padding: 0; }
   .keypad button.ghost { border-color: transparent; background: transparent; font-size: 1.6rem; }
   #lockMsg { min-height: 1.6em; color: var(--danger); font-size: .9rem; }
+  body.setup > header, body.setup > nav, body.setup > main, body.setup dialog { display: none !important; }
+  #setupScreen { position: fixed; inset: 0; z-index: 45; background: var(--bg); overflow: auto;
+                 display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+  #setupScreen .box { width: 100%; max-width: 380px; text-align: center; }
+  #setupScreen img { width: 84px; height: 84px; border-radius: 20px; }
+  #setupScreen h2 { margin: 14px 0 4px; font-size: 1.35rem; }
+  #setupScreen form { text-align: start; margin-top: 18px; }
+  #setupScreen .primary { width: 100%; margin-top: 16px; padding: 12px; font-size: 1.05rem; }
+  .steps { display: flex; gap: 6px; justify-content: center; margin-top: 14px; }
+  .steps span { width: 28px; height: 5px; border-radius: 3px; background: var(--line); }
+  .steps span.on { background: var(--primary); }
+  .pwbox { position: relative; }
+  .pwbox input { padding-left: 70px; }
+  .pwbox button { position: absolute; width: auto !important; margin: 0 !important; inset-inline-end: 6px; top: 50%; transform: translateY(-50%); padding: 2px 8px; font-size: .8rem; }
+  #lockForm { width: 100%; max-width: 300px; }
+  #lockForm input { text-align: center; font-size: 1.1rem; }
+  #lockForm > button { width: 100%; margin-top: 10px; }
   body.app .webOnly, body:not(.app) .appOnly { display: none !important; }
   .linkbtn { border: none; background: none; color: var(--muted); text-decoration: underline; font-size: .85rem; }
 </style>
@@ -129,6 +146,7 @@
 <main>
   <!-- الرئيسية -->
   <section id="tab-home">
+    <h2 id="hello" style="margin:4px 0 14px;font-size:1.3rem"></h2>
     <div class="stats" id="stats"></div>
     <h2 class="section">⏰ قادم خلال 30 يوماً</h2>
     <div id="upcoming"></div>
@@ -319,11 +337,49 @@
   </form>
 </dialog>
 
+<!-- شاشة البداية: الاسم ثم كلمة المرور -->
+<div id="setupScreen" class="hidden">
+  <div class="box">
+    <img src="icons/icon-192.png" alt="">
+    <div id="stepName">
+      <h2>أهلاً بك في دفتري 👋</h2>
+      <p class="muted">أرقامك وفواتيرك ومواعيدك ومصروفاتك في مكان واحد، وكلها على جوالك.</p>
+      <form onsubmit="return setupName(event)">
+        <label>وش اسمك؟</label>
+        <input id="setupNameInput" required maxlength="40" autocomplete="given-name" placeholder="اكتب اسمك">
+        <button class="primary" type="submit">التالي</button>
+      </form>
+    </div>
+    <div id="stepPass" class="hidden">
+      <h2 id="passHello"></h2>
+      <p class="muted">اختر كلمة مرور، والتطبيق بيطلبها كل ما تفتحه.</p>
+      <form onsubmit="return setupPass(event)">
+        <label>كلمة المرور</label>
+        <div class="pwbox"><input id="setupP1" type="password" autocomplete="new-password" dir="ltr">
+          <button type="button" class="small" onclick="togglePw(this)">إظهار</button></div>
+        <label>أعد كتابة كلمة المرور</label>
+        <input id="setupP2" type="password" autocomplete="new-password" dir="ltr">
+        <p class="muted" style="font-size:.82rem;margin:6px 0 0">4 أحرف أو أرقام على الأقل. إذا اخترت أرقام بس، تطلع لك لوحة أرقام وقت الدخول.</p>
+        <p id="setupErr" style="color:var(--danger);min-height:1.3em;margin:6px 0 0"></p>
+        <button class="primary" type="submit">ابدأ</button>
+      </form>
+      <button class="linkbtn" style="margin-top:10px" onclick="showSetup('name')">← تعديل الاسم</button>
+    </div>
+    <div class="steps"><span id="dot1" class="on"></span><span id="dot2"></span></div>
+  </div>
+</div>
+
 <!-- شاشة القفل -->
 <div id="lockScreen" class="hidden" role="dialog" aria-label="التطبيق مقفل">
   <img src="icons/icon-192.png" alt="">
-  <h2>أدخل رمز القفل</h2>
+  <h2 id="lockTitle">أدخل كلمة المرور</h2>
   <div class="dots" id="lockDots"></div>
+  <form id="lockForm" class="hidden" onsubmit="event.preventDefault(); tryPass(document.getElementById('lockInput').value); return false;">
+    <div class="pwbox"><input id="lockInput" type="password" autocomplete="current-password" dir="ltr" placeholder="كلمة المرور">
+      <button type="button" class="small" onclick="togglePw(this)">إظهار</button></div>
+    <button class="primary" type="submit">دخول</button>
+    <button type="button" id="bioBtn2" class="hidden" onclick="bioUnlock()">👆 البصمة</button>
+  </form>
   <div id="lockMsg"></div>
   <div class="keypad" id="keypad">
     <button>1</button><button>2</button><button>3</button>
@@ -333,20 +389,20 @@
     <button>0</button>
     <button class="ghost" data-k="del" title="مسح">⌫</button>
   </div>
-  <button class="linkbtn" onclick="forgotPin()">نسيت الرمز؟</button>
+  <button class="linkbtn" onclick="forgotPin()">نسيت كلمة المرور؟</button>
 </div>
 
 <!-- نافذة إعداد الرمز -->
 <dialog id="pinDlg">
   <form onsubmit="return submitPin(event)">
     <h2 id="pinTitle"></h2>
-    <div id="curPinBox"><label>الرمز الحالي</label>
-      <input name="cur" type="password" inputmode="numeric" autocomplete="off" dir="ltr"></div>
+    <div id="curPinBox"><label>كلمة المرور الحالية</label>
+      <input name="cur" type="password" autocomplete="current-password" dir="ltr"></div>
     <div id="newPinBox">
-      <label>الرمز الجديد (من 4 إلى 6 أرقام)</label>
-      <input name="p1" type="password" inputmode="numeric" autocomplete="new-password" dir="ltr">
-      <label>أعد كتابة الرمز</label>
-      <input name="p2" type="password" inputmode="numeric" autocomplete="new-password" dir="ltr">
+      <label>كلمة المرور الجديدة (4 أحرف أو أرقام على الأقل)</label>
+      <input name="p1" type="password" autocomplete="new-password" dir="ltr">
+      <label>أعد كتابة كلمة المرور</label>
+      <input name="p2" type="password" autocomplete="new-password" dir="ltr">
     </div>
     <p id="pinErr" style="color:var(--danger);min-height:1.4em;margin:8px 0 0"></p>
     <div class="actions">
@@ -1138,15 +1194,15 @@ async function renderLockSettings() {
   document.getElementById('lockTimeoutBox').classList.toggle('hidden', !on);
   if (on) document.getElementById('lockTimeout').value = String(lockCfg.timeout ?? 60);
   document.getElementById('lockStatus').textContent = on
-    ? `✅ القفل مفعّل برمز من ${lockCfg.len} أرقام${lockCfg.cred ? '، و' + BIO + ' مفعّلة' : ''}.`
+    ? `✅ التطبيق محمي بكلمة مرور${lockCfg.cred ? '، و' + BIO + ' مفعّلة' : ''}. الاسم: ${profile.name || '-'}`
     : 'التطبيق يفتح بدون قفل. فعّل رمز عشان محد يفتح بياناتك من جوالك.';
   const bio = on && await bioAvailable();
   document.getElementById('lockBtns').innerHTML = on ? `
-      <button onclick="openPin('change')">تغيير الرمز</button>
+      <button onclick="openPin('change')">تغيير كلمة المرور</button>
+      <button onclick="changeName()">تغيير الاسم</button>
       ${bio ? (lockCfg.cred ? `<button onclick="disableBio()">إيقاف ${BIO}</button>`
                             : `<button class="primary" onclick="enableBio()">👆 تفعيل ${BIO}</button>`) : ''}
-      <button onclick="lockNow()">🔒 قفل الآن</button>
-      <button class="danger" onclick="openPin('remove')">إلغاء القفل</button>`
+      <button onclick="lockNow()">🔒 قفل الآن</button>`
     : '<button class="primary" onclick="openPin(\'set\')">🔐 تفعيل رمز القفل</button>';
 }
 
@@ -1155,7 +1211,7 @@ function openPin(mode) {
   pinMode = mode;
   const dlg = document.getElementById('pinDlg'), f = dlg.querySelector('form');
   f.reset(); document.getElementById('pinErr').textContent = '';
-  document.getElementById('pinTitle').textContent = { set: 'تفعيل رمز القفل', change: 'تغيير الرمز', remove: 'إلغاء القفل' }[mode];
+  document.getElementById('pinTitle').textContent = { set: 'تعيين كلمة المرور', change: 'تغيير كلمة المرور', remove: 'إلغاء القفل' }[mode];
   document.getElementById('curPinBox').classList.toggle('hidden', mode === 'set');
   document.getElementById('newPinBox').classList.toggle('hidden', mode === 'remove');
   dlg.showModal();
@@ -1163,17 +1219,15 @@ function openPin(mode) {
 async function submitPin(e) {
   e.preventDefault();
   const f = e.target, err = document.getElementById('pinErr');
-  const cur = normDigits(f.cur.value).trim(), p1 = normDigits(f.p1.value).trim(), p2 = normDigits(f.p2.value).trim();
-  if (pinMode !== 'set' && !(await checkPin(cur))) { err.textContent = 'الرمز الحالي غير صحيح'; return false; }
+  const cur = normDigits(f.cur.value), p1 = normDigits(f.p1.value), p2 = normDigits(f.p2.value);
+  if (pinMode !== 'set' && !(await checkPin(cur))) { err.textContent = 'كلمة المرور الحالية غير صحيحة'; return false; }
   if (pinMode === 'remove') {
     lockCfg = null; saveLock(); f.closest('dialog').close(); toast('تم إلغاء القفل'); return false;
   }
-  if (!/^\d{4,6}$/.test(p1)) { err.textContent = 'الرمز لازم يكون من 4 إلى 6 أرقام'; return false; }
-  if (p1 !== p2) { err.textContent = 'الرمزان غير متطابقين'; return false; }
-  const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
-  lockCfg = Object.assign({ timeout: 60 }, lockCfg || {}, { salt, hash: await hashPin(p1, salt), len: p1.length, fails: 0, until: 0 });
-  saveLock(); f.closest('dialog').close();
-  toast(pinMode === 'set' ? '🔐 تم تفعيل القفل' : 'تم تغيير الرمز');
+  const bad = passProblem(p1, p2); if (bad) { err.textContent = bad; return false; }
+  await setPassword(p1);
+  f.closest('dialog').close();
+  toast(pinMode === 'set' ? '🔐 تم تفعيل القفل' : 'تم تغيير كلمة المرور');
   if (pinMode === 'set' && await bioAvailable() && confirm('تبي تفتح التطبيق بـ' + BIO + ' بعد؟')) enableBio();
   return false;
 }
@@ -1223,7 +1277,15 @@ function lockNow() {
   document.body.classList.add('locked');
   document.getElementById('lockScreen').classList.remove('hidden');
   document.getElementById('bioKey').style.visibility = lockCfg.cred ? 'visible' : 'hidden';
+  const numeric = isNumericLock();
+  document.getElementById('keypad').classList.toggle('hidden', !numeric);
+  document.getElementById('lockDots').classList.toggle('hidden', !numeric);
+  document.getElementById('lockForm').classList.toggle('hidden', numeric);
+  document.getElementById('bioBtn2').classList.toggle('hidden', !lockCfg.cred);
+  document.getElementById('lockTitle').textContent = (profile.name ? `أهلاً ${profile.name} 👋 ` : '') + 'أدخل كلمة المرور';
+  document.getElementById('lockInput').value = '';
   pinBuf = ''; drawDots(); showBlock();
+  if (!numeric && !lockCfg.cred) setTimeout(() => document.getElementById('lockInput').focus(), 100);
   if (lockCfg.cred && !document.hidden && bioAutoOk()) setTimeout(bioUnlock, 250);
 }
 function unlock() {
@@ -1250,27 +1312,33 @@ async function pressKey(k) {
   if (showBlock() || pinBuf.length >= lockCfg.len) return;
   pinBuf += k; drawDots();
   if (pinBuf.length < lockCfg.len) return;
-  const ok = await checkPin(pinBuf);
-  if (ok) { lockCfg.fails = 0; lockCfg.until = 0; saveLock(); document.getElementById('lockMsg').textContent = ''; unlock(); return; }
+  const pin = pinBuf; pinBuf = '';
+  if (!(await tryPass(pin))) drawDots(true);
+}
+async function tryPass(pass) {
+  if (!isLocked() || !lockCfg || showBlock() || !pass) return false;
+  const ok = await checkPin(normDigits(pass));
+  if (ok) { lockCfg.fails = 0; lockCfg.until = 0; saveLock(); document.getElementById('lockMsg').textContent = ''; unlock(); return true; }
   lockCfg.fails = (lockCfg.fails || 0) + 1;
   if (lockCfg.fails >= 5) lockCfg.until = Date.now() + Math.min(30000 * 2 ** (lockCfg.fails - 5), 15 * 60000);
   saveLock();
-  pinBuf = ''; drawDots(true);
-  document.getElementById('lockMsg').textContent = 'رمز غير صحيح';
+  document.getElementById('lockInput').value = '';
+  document.getElementById('lockMsg').textContent = 'كلمة المرور غير صحيحة';
   showBlock();
+  return false;
 }
 function forgotPin() {
-  if (!confirm('ما فيه طريقة تسترجع فيها الرمز، عشان تبقى بياناتك محمية.\n\nتقدر تمسح كل بيانات التطبيق من هذا الجهاز وتبدأ من جديد. وبعدها تقدر تسترجع نسخة احتياطية إذا كنت مصدّرها قبل.\n\nتبي تكمل؟')) return;
+  if (!confirm('ما فيه طريقة تسترجع فيها كلمة المرور، عشان تبقى بياناتك محمية.\n\nتقدر تمسح كل بيانات التطبيق من هذا الجهاز وتبدأ من جديد. وبعدها تقدر تسترجع نسخة احتياطية إذا كنت مصدّرها قبل.\n\nتبي تكمل؟')) return;
   if (!confirm('تأكيد نهائي: بتنحذف كل الأرقام والفواتير والمواعيد والمصروفات اللي على هذا الجهاز.')) return;
   db = { contacts: [], bills: [], events: [], expenses: [], settings: {} };
   try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) {}
-  lockCfg = null; saveLock(); unlock(); toast('تم مسح البيانات وإلغاء القفل');
+  lockCfg = null; saveLock(); unlock(); showSetup('pass'); toast('تم مسح البيانات. اختر كلمة مرور جديدة');
 }
 document.getElementById('keypad').addEventListener('click', e => {
   const b = e.target.closest('button'); if (b) pressKey(b.dataset.k || b.textContent.trim());
 });
 document.addEventListener('keydown', e => {
-  if (!isLocked()) return;
+  if (!isLocked() || !isNumericLock()) return;
   const d = normDigits(e.key);
   if (/^\d$/.test(d)) pressKey(d); else if (e.key === 'Backspace') pressKey('del');
 });
@@ -1289,6 +1357,82 @@ document.addEventListener('visibilitychange', () => {
   } else if (!isLocked() && Date.now() - hiddenAt >= (lockCfg.timeout ?? 60) * 1000) lockNow();
   else if (isLocked() && lockCfg.cred && bioAutoOk()) setTimeout(bioUnlock, 250);
 });
+
+// ---------- الملف الشخصي وشاشة البداية ----------
+const PROFILE_KEY = KEY + '-profile';
+let profile = {};
+function loadProfile() { try { profile = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}') || {}; } catch (e) { profile = {}; } }
+function saveProfile() { try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch (e) {} renderHello(); }
+function renderHello() {
+  const h = new Date().getHours();
+  const greet = h < 12 ? 'صباح الخير' : 'مساء الخير';
+  document.getElementById('hello').textContent = profile.name ? `${greet} يا ${profile.name} 👋` : '';
+}
+const isNumericLock = () => !!lockCfg && lockCfg.numeric !== false;
+function passProblem(p1, p2) {
+  if (p1.length < 4) return 'كلمة المرور لازم تكون 4 أحرف أو أرقام على الأقل';
+  if (/^\d+$/.test(p1) && p1.length > 8) return 'إذا كانت أرقام بس، خلها من 4 إلى 8 أرقام';
+  if (p1 !== p2) return 'كلمتا المرور غير متطابقتين';
+  return '';
+}
+async function setPassword(p) {
+  const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+  const numeric = /^\d{4,8}$/.test(p);
+  lockCfg = Object.assign({ timeout: 60 }, lockCfg || {},
+    { salt, hash: await hashPin(p, salt), numeric, len: numeric ? p.length : 0, fails: 0, until: 0 });
+  saveLock();
+}
+function togglePw(btn) {
+  const inp = btn.parentElement.querySelector('input');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? 'إظهار' : 'إخفاء';
+}
+function showSetup(step) {
+  document.body.classList.add('setup');
+  document.getElementById('setupScreen').classList.remove('hidden');
+  const pass = step === 'pass';
+  document.getElementById('stepName').classList.toggle('hidden', pass);
+  document.getElementById('stepPass').classList.toggle('hidden', !pass);
+  document.getElementById('dot2').classList.toggle('on', pass);
+  if (pass) {
+    document.getElementById('passHello').textContent = `أهلاً ${profile.name} 👋`;
+    document.getElementById('setupErr').textContent = '';
+    setTimeout(() => document.getElementById('setupP1').focus(), 100);
+  } else {
+    document.getElementById('setupNameInput').value = profile.name || '';
+    setTimeout(() => document.getElementById('setupNameInput').focus(), 100);
+  }
+}
+function setupName(e) {
+  e.preventDefault();
+  const name = document.getElementById('setupNameInput').value.trim();
+  if (!name) return false;
+  profile.name = name; saveProfile();
+  if (lockCfg) finishSetup(); else showSetup('pass');
+  return false;
+}
+async function setupPass(e) {
+  e.preventDefault();
+  const p1 = normDigits(document.getElementById('setupP1').value), p2 = normDigits(document.getElementById('setupP2').value);
+  const bad = passProblem(p1, p2);
+  if (bad) { document.getElementById('setupErr').textContent = bad; return false; }
+  if (!window.crypto || !crypto.subtle) { document.getElementById('setupErr').textContent = 'هذا المتصفح لا يدعم الحماية. افتح التطبيق من رابطه.'; return false; }
+  await setPassword(p1);
+  document.getElementById('setupP1').value = document.getElementById('setupP2').value = '';
+  finishSetup();
+  toast(`🎉 أهلاً ${profile.name}! التطبيق جاهز`);
+  if (await bioAvailable() && confirm('تبي تفتح التطبيق بـ' + BIO + ' بعد؟')) enableBio();
+  return false;
+}
+function finishSetup() {
+  document.body.classList.remove('setup');
+  document.getElementById('setupScreen').classList.add('hidden');
+  renderHello(); renderLockSettings(); render(); autoSyncSms();
+}
+function changeName() {
+  const n = prompt('اكتب اسمك:', profile.name || '');
+  if (n && n.trim()) { profile.name = n.trim(); saveProfile(); renderLockSettings(); }
+}
 
 // ---------- رسائل البنك من الجوال (تطبيق أندرويد) ----------
 let smsMode = 'manual', pendingSmsSince = 0;
@@ -1343,7 +1487,11 @@ window.handleBack = () => {
 
 // ---------- البداية ----------
 loadLock();
-if (lockCfg) lockNow();
+loadProfile();
+if (!profile.name) showSetup('name');
+else if (!lockCfg) showSetup('pass');
+else lockNow();
+renderHello();
 renderLockSettings();
 load();
 fillCatSelects();
@@ -1353,7 +1501,7 @@ if (!handleIncomingURL()) {
   try { const t = localStorage.getItem(KEY + '-tab'); if (t) goTab(t); } catch (e) {}
 }
 window.addEventListener('hashchange', handleIncomingURL);
-if (!lockCfg) autoSyncSms();
+if (!lockCfg && profile.name) autoSyncSms();
 
 // ---------- تطبيق قابل للتثبيت (PWA) ----------
 const appUrl = () => location.href.split('#')[0].split('?')[0];
