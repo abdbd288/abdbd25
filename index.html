@@ -65,6 +65,17 @@
   .actions { display: flex; gap: 8px; justify-content: flex-start; margin-top: 16px; }
   h2.section { font-size: 1.05rem; margin: 18px 0 10px; }
   .hidden { display: none !important; }
+  select.mini { width: auto; padding: 2px 8px; font-size: .8rem; border-radius: 999px; }
+  .catrow { display: grid; grid-template-columns: 9em 1fr auto; gap: 8px; align-items: center; margin: 6px 0; cursor: pointer; }
+  .catbar { height: 10px; border-radius: 6px; background: var(--primary); min-width: 2px; }
+  .amount-out { color: var(--danger); font-weight: 700; white-space: nowrap; }
+  .amount-in { color: var(--ok); font-weight: 700; white-space: nowrap; }
+  .prev { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center;
+          border-bottom: 1px solid var(--line); padding: 8px 0; }
+  .prev input[type=checkbox] { width: 18px; height: 18px; }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+           padding: 10px 18px; border-radius: 12px; z-index: 50; max-width: calc(100vw - 32px); }
+  details summary { cursor: pointer; }
 </style>
 </head>
 <body>
@@ -73,6 +84,7 @@
   <button data-tab="home" class="active">الرئيسية</button>
   <button data-tab="contacts">جهات الاتصال</button>
   <button data-tab="bills">الفواتير</button>
+  <button data-tab="expenses">المصروفات</button>
   <button data-tab="events">المواعيد والتواريخ</button>
   <button data-tab="settings">النسخ الاحتياطي</button>
 </nav>
@@ -91,10 +103,12 @@
       <input id="contactSearch" type="search" placeholder="ابحث بالاسم أو الرقم">
       <select id="contactFilter">
         <option value="">الكل</option>
-        <option>العائلة</option><option>الأصدقاء</option><option>الزملاء</option>
+        <option>العائلة</option><option>الأصدقاء</option><option>الزملاء</option><option>أخرى</option>
       </select>
       <button class="primary" onclick="openContact()">+ إضافة رقم</button>
+      <button onclick="document.getElementById('importDlg').showModal()">📥 استيراد من الجوال</button>
     </div>
+    <div class="muted" id="contactCount" style="margin-bottom:8px"></div>
     <div id="contactList"></div>
   </section>
 
@@ -110,6 +124,37 @@
       <button class="primary" onclick="openBill()">+ إضافة فاتورة</button>
     </div>
     <div id="billList"></div>
+  </section>
+
+  <!-- المصروفات -->
+  <section id="tab-expenses" class="hidden">
+    <div class="toolbar">
+      <button class="primary" onclick="openSms()">📩 لصق رسائل البنك</button>
+      <label class="btn" style="margin:0;color:var(--text)">📄 استيراد كشف حساب (CSV)
+        <input type="file" accept=".csv,text/csv" class="hidden" onchange="importStatement(this)">
+      </label>
+      <button onclick="openExpense()">+ إضافة يدوي</button>
+    </div>
+    <div class="toolbar">
+      <input id="expMonth" type="month" style="flex:0 0 auto;width:auto">
+      <select id="expCat" class="catSelect" data-all="1"></select>
+      <input id="expSearch" type="search" placeholder="ابحث في المصروفات">
+    </div>
+    <div id="expSummary"></div>
+    <div id="expList"></div>
+    <details class="card">
+      <summary><b>⚡ التسجيل التلقائي من رسائل البنك (اختياري)</b></summary>
+      <p class="muted">بعد ما يكون التطبيق على رابط ثابت، تقدر تخلي جوالك يرسل له كل رسالة بنك تجيك، ويسجّلها لحاله بدون ما تفتحه.</p>
+      <p><b>آيفون — تطبيق «الاختصارات»:</b></p>
+      <ol class="muted">
+        <li>افتح تبويب «الأتمتة» واضغط +، واختر «رسالة».</li>
+        <li>في «المرسل» اختر اسم البنك (مثل AlRajhiBank)، وفعّل «تشغيل فوراً».</li>
+        <li>أضف إجراء «ترميز URL» على «محتوى الرسالة».</li>
+        <li>أضف إجراء «فتح عناوين URL» بهذا الرابط، وبعده النص المرمّز:<br>
+          <code dir="ltr" id="autoUrl" style="word-break:break-all"></code></li>
+      </ol>
+      <p><b>أندرويد:</b> تطبيق MacroDroid أو Tasker يسوي نفس الشي: عند وصول SMS من البنك يفتح الرابط نفسه.</p>
+    </details>
   </section>
 
   <!-- المواعيد -->
@@ -154,7 +199,7 @@
     <div class="grid2">
       <div><label>رقم الجوال *</label><input name="phone" type="tel" dir="ltr" required></div>
       <div><label>التصنيف</label>
-        <select name="group"><option>العائلة</option><option>الأصدقاء</option><option>الزملاء</option></select></div>
+        <select name="group"><option>العائلة</option><option>الأصدقاء</option><option>الزملاء</option><option>أخرى</option></select></div>
       <div><label>رقم آخر</label><input name="phone2" type="tel" dir="ltr"></div>
       <div><label>تاريخ الميلاد</label><input name="birthday" type="date"></div>
     </div>
@@ -213,9 +258,85 @@
   </form>
 </dialog>
 
+<!-- نافذة استيراد جهات الاتصال -->
+<dialog id="importDlg">
+  <form method="dialog" onsubmit="return false">
+    <h2>📥 استيراد الأرقام من جوالك</h2>
+    <label>ضع الأرقام المستوردة في تصنيف</label>
+    <select id="importGroup"><option>أخرى</option><option>العائلة</option><option>الأصدقاء</option><option>الزملاء</option></select>
+    <div class="card" style="margin-top:12px" id="pickerBox">
+      <b>اختيار مباشر من جهات الاتصال</b>
+      <p class="muted">يشتغل على أندرويد (متصفح Chrome). تقدر تحدد كل الأسماء مرة وحدة.</p>
+      <button type="button" class="primary" onclick="pickContacts()">اختيار من جهات الاتصال</button>
+    </div>
+    <div class="card">
+      <b>من ملف (آيفون وأندرويد)</b>
+      <p class="muted">صدّر كل جهات الاتصال في ملف واحد واختره هنا، وتنضاف كلها دفعة وحدة والمكرر يتجاهله.</p>
+      <details class="muted">
+        <summary>كيف أصدّرها؟</summary>
+        <p><b>آيفون:</b> افتح تطبيق «جهات الاتصال» واضغط «القوائم» فوق، بعدين اضغط مطولاً على «كل جهات الاتصال» واختر «تصدير»، واحفظ الملف في «الملفات».</p>
+        <p><b>أندرويد:</b> افتح تطبيق «جهات الاتصال» وروح لـ«الإصلاح والإدارة» أو «الإعدادات»، واختر «تصدير إلى ملف» (.vcf).</p>
+        <p><b>Google Contacts:</b> من contacts.google.com اختر «تصدير» وبعدها vCard أو CSV.</p>
+      </details>
+      <label class="btn" style="color:var(--text);display:inline-block">📂 اختيار ملف .vcf أو .csv
+        <input type="file" accept=".vcf,.vcard,.csv,text/vcard,text/x-vcard,text/csv" class="hidden" onchange="importContactsFile(this)">
+      </label>
+    </div>
+    <div class="actions"><button type="button" onclick="this.closest('dialog').close()">إغلاق</button></div>
+  </form>
+</dialog>
+
+<!-- نافذة لصق رسائل البنك -->
+<dialog id="smsDlg">
+  <form method="dialog" onsubmit="return false">
+    <h2>📩 لصق رسائل البنك</h2>
+    <p class="muted">انسخ رسائل البنك (شراء، سحب، سداد...) والصقها هنا. إذا عندك أكثر من رسالة اترك سطر فاضي بين كل وحدة والثانية. المبلغ والمتجر والتاريخ والتصنيف تنقرا لحالها.</p>
+    <textarea id="smsText" rows="7" placeholder="شراء عبر نقاط البيع&#10;بطاقة: ***1234&#10;مبلغ: SAR 25.00&#10;لدى: STARBUCKS&#10;في: 24/11/26 14:30"></textarea>
+    <div class="actions">
+      <button type="button" class="primary" onclick="parseSmsBox()">تحليل</button>
+      <button type="button" onclick="pasteClipboard()">📋 لصق من الحافظة</button>
+      <button type="button" onclick="this.closest('dialog').close()">إلغاء</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- نافذة مراجعة المصروفات قبل الحفظ -->
+<dialog id="previewDlg">
+  <form method="dialog" onsubmit="return false">
+    <h2>مراجعة قبل الحفظ</h2>
+    <p class="muted" id="previewNote"></p>
+    <div id="previewList" style="max-height:55vh;overflow:auto"></div>
+    <div class="actions">
+      <button type="button" class="primary" onclick="savePreview()">حفظ المحدد</button>
+      <button type="button" onclick="this.closest('dialog').close()">إلغاء</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- نافذة مصروف -->
+<dialog id="expenseDlg">
+  <form method="dialog" onsubmit="return saveExpense(event)">
+    <h2 id="expenseTitle">إضافة مصروف</h2>
+    <input type="hidden" name="id">
+    <label>الوصف / المتجر *</label><input name="title" required>
+    <div class="grid2">
+      <div><label>المبلغ (ر.س) *</label><input name="amount" type="number" step="0.01" min="0" dir="ltr" required></div>
+      <div><label>النوع</label><select name="kind"><option value="out">مصروف</option><option value="in">دخل</option></select></div>
+      <div><label>التاريخ *</label><input name="date" type="date" required></div>
+      <div><label>الوقت</label><input name="time" type="time"></div>
+    </div>
+    <label>التصنيف</label><select name="category" class="catSelect"></select>
+    <label>ملاحظات</label><textarea name="notes" rows="2"></textarea>
+    <div class="actions">
+      <button class="primary" type="submit">حفظ</button>
+      <button type="button" onclick="this.closest('dialog').close()">إلغاء</button>
+    </div>
+  </form>
+</dialog>
+
 <script>
 const KEY = 'daftari-data-v1';
-let db = { contacts: [], bills: [], events: [] };
+let db = { contacts: [], bills: [], events: [], expenses: [] };
 
 function load() {
   try { const raw = localStorage.getItem(KEY); if (raw) db = Object.assign(db, JSON.parse(raw)); } catch (e) {}
@@ -263,7 +384,7 @@ document.getElementById('tabs').addEventListener('click', e => {
   document.querySelectorAll('main > section').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + b.dataset.tab));
   try { localStorage.setItem(KEY + '-tab', b.dataset.tab); } catch (e) {}
 });
-['contactSearch','contactFilter','billSearch','billFilter','eventSearch','eventFilter']
+['contactSearch','contactFilter','billSearch','billFilter','eventSearch','eventFilter','expMonth','expCat','expSearch']
   .forEach(id => document.getElementById(id).addEventListener('input', render));
 
 // ---------- النماذج ----------
@@ -340,11 +461,15 @@ function renderContacts() {
     .filter(c => (!f || c.group === f) && (!q || (c.name + ' ' + c.phone + ' ' + c.phone2 + ' ' + c.notes).toLowerCase().includes(q)))
     .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
   const el = document.getElementById('contactList');
+  document.getElementById('contactCount').textContent = db.contacts.length ? `${list.length} من ${db.contacts.length} رقم` : '';
   if (!list.length) { el.innerHTML = '<div class="empty">لا توجد أرقام بعد. اضغط «إضافة رقم».</div>'; return; }
   el.innerHTML = list.map(c => `
     <div class="card">
       <div class="row between">
-        <div><b>${esc(c.name)}</b> <span class="pill">${groupIcon[c.group] || ''} ${esc(c.group)}</span></div>
+        <div><b>${esc(c.name)}</b> ${groupIcon[c.group] || '📇'}
+          <select class="mini" onchange="setGroup('${c.id}', this.value)">
+            ${GROUPS.map(g => `<option ${g === c.group ? 'selected' : ''}>${g}</option>`).join('')}
+          </select></div>
         <div class="row">
           <button class="small" onclick="openContact('${c.id}')">تعديل</button>
           <button class="small danger" onclick="removeItem('contacts','${c.id}')">حذف</button>
@@ -437,7 +562,8 @@ function renderHome() {
     <div class="card stat"><span class="muted">جهات الاتصال</span><b>${db.contacts.length}</b></div>
     <div class="card stat"><span class="muted">فواتير غير مدفوعة</span><b>${unpaid.length}</b></div>
     <div class="card stat"><span class="muted">المبلغ المستحق</span><b>${money(total)}</b></div>
-    <div class="card stat"><span class="muted">مواعيد قادمة</span><b>${db.events.filter(e => daysUntil(eventDate(e)) >= 0).length}</b></div>`;
+    <div class="card stat"><span class="muted">مواعيد قادمة</span><b>${db.events.filter(e => daysUntil(eventDate(e)) >= 0).length}</b></div>
+    <div class="card stat" style="cursor:pointer" onclick="document.querySelector('[data-tab=expenses]').click()"><span class="muted">مصروف هذا الشهر</span><b>${money(db.expenses.filter(x => x.kind !== 'in' && x.date.startsWith(toISO(today()).slice(0, 7))).reduce((s, x) => s + x.amount, 0))}</b></div>`;
   document.getElementById('upcoming').innerHTML = up.length ? up.map(i => {
     const [lbl, cls] = relLabel(daysUntil(i.d));
     return `<div class="card row between" style="cursor:pointer" onclick="document.querySelector('[data-tab=${i.tab}]').click()">
@@ -446,7 +572,367 @@ function renderHome() {
   }).join('') : '<div class="empty">لا يوجد شيء خلال الثلاثين يوماً القادمة 🌿</div>';
 }
 
-function render() { renderHome(); renderContacts(); renderBills(); renderEvents(); }
+function render() { renderHome(); renderContacts(); renderBills(); renderEvents(); renderExpenses(); }
+
+// ---------- أدوات عامة ----------
+const GROUPS = ['العائلة', 'الأصدقاء', 'الزملاء', 'أخرى'];
+function setGroup(id, g) { const c = db.contacts.find(x => x.id === id); if (c) { c.group = g; persist(); } }
+function toast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg; t.classList.remove('hidden');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.add('hidden'), 4000);
+}
+function normDigits(s) {
+  return String(s ?? '')
+    .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+    .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+    .replace(/٫/g, '.').replace(/٬/g, ',');
+}
+function normPhone(p) { // مفتاح موحّد لمقارنة الأرقام
+  let d = normDigits(p).replace(/[^\d]/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (/^9665\d{8}$/.test(d)) d = '0' + d.slice(3);
+  else if (/^5\d{8}$/.test(d)) d = '0' + d;
+  return d;
+}
+function cleanPhone(p) {
+  const raw = normDigits(p).replace(/\s|-|\(|\)/g, '');
+  const n = normPhone(raw);
+  if (/^05\d{8}$/.test(n)) return n;
+  return (/^(\+|00)/.test(raw) ? '+' : '') + n;
+}
+function parseCSV(text) {
+  text = text.replace(/^﻿/, '');
+  const first = text.split('\n')[0];
+  const delim = [',', ';', '\t'].sort((a, b) => first.split(b).length - first.split(a).length)[0];
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === delim) { row.push(f); f = ''; }
+    else if (c === '\n') { row.push(f); rows.push(row); row = []; f = ''; }
+    else if (c !== '\r') f += c;
+  }
+  if (f || row.length) { row.push(f); rows.push(row); }
+  return rows.filter(r => r.some(x => x.trim()));
+}
+function mkDate(y, m, d) {
+  if (m > 12 && d <= 12) [m, d] = [d, m];
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const x = new Date(y, m - 1, d);
+  return x.getMonth() === m - 1 ? x : null;
+}
+const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+function parseAnyDate(s) {
+  s = normDigits(s);
+  let m = s.match(/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (m) return mkDate(+m[1], +m[2], +m[3]);
+  m = s.match(/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+  if (m) return mkDate(+m[3], +m[2], +m[1]);
+  m = s.match(/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2})(?!\d)/);
+  if (m) { // سنة من رقمين: نختار الأقرب لليوم (يوم/شهر/سنة أو سنة/شهر/يوم)
+    const lim = today().getTime() + 2 * 86400000;
+    const cands = [mkDate(2000 + +m[3], +m[2], +m[1]), mkDate(2000 + +m[1], +m[2], +m[3])]
+      .filter(d => d && d.getTime() <= lim);
+    if (cands.length) return cands.sort((a, b) => b - a)[0];
+  }
+  m = s.match(/(\d{1,2})[\s-]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s-]*(\d{2,4})?/i);
+  if (m) { let y = m[3] ? +m[3] : today().getFullYear(); if (y < 100) y += 2000; return mkDate(y, MONTHS[m[2].toLowerCase()], +m[1]); }
+  return null;
+}
+function parseNum(s) {
+  s = normDigits(s).trim();
+  const neg = /^\(.*\)$/.test(s) || /^-|-$/.test(s.replace(/[^\d.\-()]/g, ''));
+  const n = parseFloat(s.replace(/[^\d.]/g, ''));
+  return isNaN(n) ? null : (neg ? -n : n);
+}
+
+// ---------- استيراد جهات الاتصال ----------
+function addContacts(list) {
+  const group = document.getElementById('importGroup').value;
+  const seen = new Set(db.contacts.flatMap(c => [normPhone(c.phone), c.phone2 && normPhone(c.phone2)]).filter(Boolean));
+  let added = 0, dup = 0;
+  for (const p of list) {
+    const phones = [...new Set(p.phones.map(cleanPhone).filter(x => normPhone(x).length >= 5))];
+    const fresh = phones.filter(x => !seen.has(normPhone(x)));
+    if (!fresh.length) { if (phones.length) dup++; continue; }
+    fresh.forEach(x => seen.add(normPhone(x)));
+    db.contacts.push({ id: uid(), name: (p.name || '').trim() || fresh[0], phone: fresh[0], phone2: fresh[1] || '',
+                       group, birthday: p.birthday || '', notes: '' });
+    added++;
+  }
+  persist();
+  document.getElementById('importDlg').close();
+  document.getElementById('contactFilter').value = ''; render();
+  toast(`تمت إضافة ${added} رقم` + (dup ? ` — وتم تجاهل ${dup} مكرر` : ''));
+}
+async function pickContacts() {
+  if (!('contacts' in navigator && 'ContactsManager' in window)) {
+    alert('الاختيار المباشر غير مدعوم في هذا المتصفح (الآيفون لا يدعمه). استخدم الاستيراد من ملف بالأسفل.');
+    return;
+  }
+  try {
+    const res = await navigator.contacts.select(['name', 'tel'], { multiple: true });
+    addContacts(res.map(r => ({ name: (r.name || [])[0], phones: r.tel || [] })));
+  } catch (e) { alert('تعذّر الوصول لجهات الاتصال.'); }
+}
+function decodeQP(s, charset) {
+  const bytes = [];
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '=' && /^[0-9A-F]{2}$/i.test(s.substr(i + 1, 2))) { bytes.push(parseInt(s.substr(i + 1, 2), 16)); i += 2; }
+    else bytes.push(s.charCodeAt(i) & 255);
+  }
+  try { return new TextDecoder(charset || 'utf-8').decode(new Uint8Array(bytes)); } catch (e) { return s; }
+}
+function parseVCF(text) {
+  const lines = [];
+  for (const l of text.replace(/\r\n?/g, '\n').split('\n')) {
+    const i = lines.length - 1;
+    if (i >= 0 && /^[ \t]/.test(l)) { lines[i] += l.slice(1); continue; }
+    if (i >= 0 && /QUOTED-PRINTABLE/i.test(lines[i].split(':')[0]) && lines[i].endsWith('=')) { lines[i] = lines[i].slice(0, -1) + l; continue; }
+    lines.push(l);
+  }
+  const out = []; let cur = null;
+  const unesc = v => v.replace(/\\n/gi, ' ').replace(/\\([,;\\])/g, '$1').trim();
+  for (const line of lines) {
+    if (/^BEGIN:VCARD/i.test(line)) { cur = { fn: '', n: '', org: '', phones: [], birthday: '' }; continue; }
+    if (/^END:VCARD/i.test(line)) { if (cur) out.push({ name: cur.fn || cur.n || cur.org, phones: cur.phones, birthday: cur.birthday }); cur = null; continue; }
+    if (!cur) continue;
+    const idx = line.indexOf(':'); if (idx < 0) continue;
+    const params = line.slice(0, idx).split(';');
+    const prop = params[0].split('.').pop().toUpperCase();
+    let val = line.slice(idx + 1);
+    if (params.some(p => /QUOTED-PRINTABLE/i.test(p))) {
+      const cs = (params.find(p => /^CHARSET=/i.test(p)) || '').split('=')[1];
+      val = decodeQP(val, cs);
+    }
+    if (prop === 'FN') cur.fn = unesc(val);
+    else if (prop === 'N') { const [last, first, mid] = val.split(';').map(unesc); cur.n = [first, mid, last].filter(Boolean).join(' '); }
+    else if (prop === 'ORG') cur.org = unesc(val.split(';')[0]);
+    else if (prop === 'TEL') cur.phones.push(val.replace(/^tel:/i, ''));
+    else if (prop === 'BDAY') { const d = parseAnyDate(val.replace(/^--/, '2000-')); if (d) cur.birthday = toISO(d); }
+  }
+  return out;
+}
+function contactsFromCSV(rows) {
+  const h = rows[0].map(x => x.trim().toLowerCase());
+  const find = re => h.findIndex(x => re.test(x));
+  const first = find(/first name|given name|الاسم الأول/), last = find(/last name|family name|اسم العائلة/);
+  let name = find(/^(name|full name|display name|الاسم|اسم)$/);
+  if (name < 0) name = find(/name|اسم/);
+  const phoneCols = h.map((x, i) => /phone|mobile|tel|جوال|هاتف|رقم/.test(x) && !/type|label|نوع/.test(x) ? i : -1).filter(i => i >= 0);
+  return rows.slice(1).map(r => ({
+    name: first >= 0 ? [r[first], r[last]].filter(Boolean).join(' ') || r[name] : r[name],
+    phones: phoneCols.flatMap(i => String(r[i] || '').split(/\s*:::\s*/)).filter(Boolean),
+  }));
+}
+function importContactsFile(input) {
+  const file = input.files[0]; if (!file) return;
+  file.text().then(t => {
+    const list = /BEGIN:VCARD/i.test(t) ? parseVCF(t) : contactsFromCSV(parseCSV(t));
+    if (!list.length) throw new Error();
+    addContacts(list);
+  }).catch(() => alert('لم أستطع قراءة الملف. تأكد أنه بصيغة vCard (.vcf) أو CSV.'))
+    .finally(() => input.value = '');
+}
+
+// ---------- المصروفات ----------
+const CATS = {
+  'مطاعم وقهوة': /starbucks|cafe|coffee|caf[eé]|مطعم|كافيه|كوفي|قهوة|kudu|كودو|albaik|البيك|mcdonald|ماكدونالدز|burger|برجر|pizza|بيتزا|hunger|هنقر|jahez|جاهز|mrsool|مرسول|shawarma|شاورما|dunkin|دانكن|barn|بارنز|hortons|هورتنز|chefz|ذا شفز|toyou|تويو|restaurant|kfc|herfy|هرفي/i,
+  'بقالة وتموين': /panda|بنده|othaim|العثيمين|danube|الدانوب|tamimi|التميمي|carrefour|كارفور|lulu|لولو|nesto|نستو|بقالة|تموينات|supermarket|hypermarket|market|ماركت|nana|نعناع|farm|المزرعة/i,
+  'وقود ومواصلات': /aldrees|الدريس|petromin|بترومين|sasco|ساسكو|naft|نفط|fuel|وقود|محطة|بنزين|uber|اوبر|أوبر|careem|كريم|bolt|parking|مواقف|سيارة|غسيل|car wash|salik/i,
+  'فواتير واشتراكات': /stc|mobily|موبايلي|zain|زين|سداد|sadad|كهرباء|electric|المياه|water|netflix|نتفلكس|shahid|شاهد|spotify|apple\.com|icloud|google|youtube|اشتراك|subscription|فاتورة|bill/i,
+  'صحة': /صيدلي|pharma|nahdi|النهدي|الدواء|dawaa|مستشفى|hospital|clinic|عيادة|مستوصف|طبي|medical|dental|أسنان/i,
+  'تسوق': /amazon|أمازون|noon|نون|shein|شي ان|namshi|نمشي|extra|اكسترا|jarir|جرير|ikea|ايكيا|centrepoint|سنتربوينت|mall|مول|zara|زارا|h&m|max|ماكس/i,
+  'ترفيه': /cinema|سينما|vox|ڤوكس|muvi|موڤي|ticket|تذاكر|تذكرة|playstation|steam|بلايستيشن|نادي|gym|جيم/i,
+  'تحويلات': /حوال|تحويل|transfer|حوالة/i,
+  'سحب نقدي': /سحب نقدي|صراف|atm|cash withdrawal|withdrawal/i,
+  'أخرى': /$^/,
+};
+const CAT_NAMES = Object.keys(CATS);
+function guessCategory(s) { return CAT_NAMES.find(c => CATS[c].test(s)) || 'أخرى'; }
+function fillCatSelects() {
+  document.querySelectorAll('.catSelect').forEach(sel => {
+    sel.innerHTML = (sel.dataset.all ? '<option value="">كل التصنيفات</option>' : '') + CAT_NAMES.map(c => `<option>${c}</option>`).join('');
+  });
+}
+
+const INCOME_RE = /(إيداع|ايداع|وارد|واردة|استلام|مستلم|credited|deposit|received|استرداد|refund|راتب|salary)/i;
+const DEBIT_RE = /(شراء|purchase|سحب|withdraw|مدفوعات|سداد|payment|مدين|debit|خصم)/i;
+function parseSMS(msg) {
+  const t = normDigits(msg).trim();
+  if (!t) return null;
+  if (/(رمز|otp|verification|التحقق|كلمة المرور)/i.test(t) && !DEBIT_RE.test(t)) return null;
+  const lines = t.split('\n').map(l => l.trim()).filter(Boolean);
+  const body = lines.filter(l => !/(رصيد|balance|avail)/i.test(l)).join('\n') || t;
+  const CUR = '(?:SAR|SR|ر\\.\\s?س|ريال)';
+  const NUM = '(\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?|\\d+(?:\\.\\d+)?)';
+  const m = body.match(new RegExp('(?:مبلغ|المبلغ|بمبلغ|amount|قيمة)\\s*[:：]?\\s*' + CUR + '?\\s*' + NUM, 'i'))
+         || body.match(new RegExp(CUR + '\\s*' + NUM, 'i'))
+         || body.match(new RegExp(NUM + '\\s*' + CUR, 'i'));
+  if (!m) return null;
+  const amount = parseFloat(m[1].replace(/,/g, ''));
+  if (!(amount > 0)) return null;
+  let title = '';
+  for (const re of [/(?:لدى|عند|التاجر|المتجر|merchant)\s*[:：]?\s*([^\n]+)/i, /\bat\s*[:：]?\s*([^\n]+)/i,
+                    /(?:من|إلى|الى|to|from)\s*[:：]\s*([^\n]+)/i]) {
+    const mm = t.match(re); if (mm) { title = mm[1]; break; }
+  }
+  title = (title || lines[0]).replace(/\s+(في|on)\s*[:：]?\s*\d.*$/i, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  const d = parseAnyDate(t) || today();
+  const tm = t.match(/\b(\d{1,2}:\d{2})\b/);
+  const kind = INCOME_RE.test(t) && !DEBIT_RE.test(t) ? 'in' : 'out';
+  return { id: uid(), title, amount, date: toISO(d), time: tm ? tm[1].padStart(5, '0') : '', kind,
+           category: kind === 'in' ? 'أخرى' : guessCategory(title + ' ' + t), source: 'sms', notes: '' };
+}
+const expKey = x => x.date + '|' + Number(x.amount).toFixed(2) + '|' + String(x.title).trim().toLowerCase();
+function addExpenses(items) {
+  const keys = new Set(db.expenses.map(expKey)); let n = 0;
+  for (const it of items) { const k = expKey(it); if (keys.has(k)) continue; keys.add(k); db.expenses.push(it); n++; }
+  if (n) persist();
+  return n;
+}
+
+let previewItems = [];
+function showPreview(items, note) {
+  const keys = new Set(db.expenses.map(expKey));
+  previewItems = items;
+  document.getElementById('previewNote').textContent = note || `تم العثور على ${items.length} عملية. ألغِ تحديد ما لا تريده، وغيّر التصنيف إن لزم.`;
+  document.getElementById('previewList').innerHTML = items.map((x, i) => {
+    const dup = keys.has(expKey(x));
+    return `<div class="prev">
+      <input type="checkbox" data-i="${i}" ${dup ? '' : 'checked'}>
+      <div><b>${esc(x.title)}</b>${dup ? ' <span class="pill warn">مسجّل مسبقاً</span>' : ''}
+        <div class="muted">${esc(x.date)}${x.time ? ' ' + esc(x.time) : ''}</div>
+        <select class="mini" data-cat="${i}">${CAT_NAMES.map(c => `<option ${c === x.category ? 'selected' : ''}>${c}</option>`).join('')}</select>
+        ${x.kind === 'in' ? '<span class="pill ok">دخل</span>' : ''}</div>
+      <span class="${x.kind === 'in' ? 'amount-in' : 'amount-out'}">${money(x.amount)}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('previewDlg').showModal();
+}
+function savePreview() {
+  const box = document.getElementById('previewList');
+  const chosen = previewItems.filter((x, i) => {
+    x.category = box.querySelector(`[data-cat="${i}"]`).value;
+    return box.querySelector(`[data-i="${i}"]`).checked;
+  });
+  const n = addExpenses(chosen);
+  document.getElementById('previewDlg').close();
+  goTab('expenses'); toast(`تم تسجيل ${n} عملية`);
+}
+
+function openSms() { document.getElementById('smsText').value = ''; document.getElementById('smsDlg').showModal(); }
+async function pasteClipboard() {
+  try { document.getElementById('smsText').value = await navigator.clipboard.readText(); }
+  catch (e) { alert('المتصفح لم يسمح بالقراءة من الحافظة، الصق يدوياً.'); }
+}
+function splitMessages(text) { return text.split(/\n\s*\n|^\s*-{3,}\s*$/m).map(s => s.trim()).filter(Boolean); }
+function parseSmsBox() {
+  const items = splitMessages(document.getElementById('smsText').value).map(parseSMS).filter(Boolean);
+  if (!items.length) { alert('لم أجد مبلغاً في الرسائل. تأكد أنها رسائل عمليات بنكية فيها المبلغ (SAR أو ريال).'); return; }
+  document.getElementById('smsDlg').close();
+  showPreview(items);
+}
+
+function importStatement(input) {
+  const file = input.files[0]; if (!file) return;
+  file.text().then(t => {
+    const rows = parseCSV(t);
+    const hi = rows.slice(0, 20).findIndex(r => r.some(c => /date|تاريخ/i.test(c)));
+    if (hi < 0) throw new Error();
+    const h = rows[hi].map(x => x.trim().toLowerCase());
+    const find = re => h.findIndex(x => re.test(x));
+    const di = find(/date|تاريخ/), desc = find(/desc|detail|narrat|merchant|particular|البيان|الوصف|التفاصيل|العملية|ملاحظ|وصف/);
+    const debit = find(/debit|withdraw|مدين|سحب|مصروف|خصم/), credit = find(/credit|deposit|دائن|إيداع|ايداع/);
+    const amt = find(/amount|المبلغ|مبلغ/);
+    const data = rows.slice(hi + 1);
+    const hasNeg = amt >= 0 && data.some(r => (parseNum(r[amt] || '') || 0) < 0);
+    const items = [];
+    for (const r of data) {
+      const d = parseAnyDate(r[di] || ''); if (!d) continue;
+      let v = null, kind = 'out';
+      if (debit >= 0 && parseNum(r[debit] || '')) v = Math.abs(parseNum(r[debit]));
+      else if (credit >= 0 && parseNum(r[credit] || '')) { v = Math.abs(parseNum(r[credit])); kind = 'in'; }
+      else if (amt >= 0) { const n = parseNum(r[amt] || ''); if (n) { v = Math.abs(n); kind = hasNeg && n > 0 ? 'in' : 'out'; } }
+      if (!v) continue;
+      const title = String((desc >= 0 ? r[desc] : '') || 'عملية بنكية').replace(/\s+/g, ' ').trim().slice(0, 60);
+      items.push({ id: uid(), title, amount: v, date: toISO(d), time: '', kind,
+                   category: kind === 'in' ? 'أخرى' : guessCategory(title), source: 'statement', notes: '' });
+    }
+    if (!items.length) throw new Error();
+    showPreview(items);
+  }).catch(() => alert('لم أستطع قراءة كشف الحساب. صدّره من تطبيق البنك بصيغة CSV (أو احفظ ملف Excel كـ CSV) وتأكد أن فيه أعمدة التاريخ والمبلغ.'))
+    .finally(() => input.value = '');
+}
+
+function openExpense(id) {
+  const dlg = document.getElementById('expenseDlg');
+  const x = db.expenses.find(e => e.id === id) || { date: toISO(today()), kind: 'out', category: 'أخرى' };
+  document.getElementById('expenseTitle').textContent = id ? 'تعديل' : 'إضافة مصروف';
+  fillForm(dlg.querySelector('form'), x); dlg.showModal();
+}
+function saveExpense(e) {
+  e.preventDefault();
+  const x = readForm(e.target); x.amount = Number(x.amount) || 0;
+  const old = db.expenses.find(y => y.id === x.id); if (old) x.source = old.source;
+  upsert(db.expenses, x); e.target.closest('dialog').close(); persist(); return false;
+}
+
+function renderExpenses() {
+  const monthEl = document.getElementById('expMonth');
+  if (!monthEl.value) monthEl.value = toISO(today()).slice(0, 7);
+  const mon = monthEl.value, cat = document.getElementById('expCat').value;
+  const q = document.getElementById('expSearch').value.trim().toLowerCase();
+  const inMonth = db.expenses.filter(x => x.date.startsWith(mon));
+  const outs = inMonth.filter(x => x.kind !== 'in');
+  const total = outs.reduce((s, x) => s + x.amount, 0);
+  const income = inMonth.filter(x => x.kind === 'in').reduce((s, x) => s + x.amount, 0);
+  const byCat = {}; outs.forEach(x => byCat[x.category] = (byCat[x.category] || 0) + x.amount);
+  const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  const max = cats.length ? cats[0][1] : 1;
+  document.getElementById('expSummary').innerHTML = `
+    <div class="stats">
+      <div class="card stat"><span class="muted">مصروف الشهر</span><b class="amount-out">${money(total)}</b></div>
+      <div class="card stat"><span class="muted">الدخل</span><b class="amount-in">${money(income)}</b></div>
+      <div class="card stat"><span class="muted">عدد العمليات</span><b>${inMonth.length}</b></div>
+    </div>
+    ${cats.length ? `<div class="card"><b>حسب التصنيف</b>${cats.map(([c, v]) => `
+      <div class="catrow" onclick="document.getElementById('expCat').value='${c}';render()">
+        <span>${c}</span><div class="catbar" style="width:${(v / max * 100).toFixed(1)}%"></div><span class="muted">${money(v)}</span>
+      </div>`).join('')}</div>` : ''}`;
+  const list = inMonth
+    .filter(x => (!cat || x.category === cat) && (!q || (x.title + ' ' + x.notes).toLowerCase().includes(q)))
+    .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  document.getElementById('expList').innerHTML = list.length ? list.map(x => `
+    <div class="card row between">
+      <div><b>${esc(x.title)}</b> <span class="pill">${esc(x.category)}</span>
+        <div class="muted">${fmtDate(parseDate(x.date))}${x.time ? ' — ' + esc(x.time) : ''}${x.source === 'sms' ? ' · 📩' : x.source === 'statement' ? ' · 📄' : ''}</div></div>
+      <div class="row">
+        <span class="${x.kind === 'in' ? 'amount-in' : 'amount-out'}">${x.kind === 'in' ? '+' : ''}${money(x.amount)}</span>
+        <button class="small" onclick="openExpense('${x.id}')">تعديل</button>
+        <button class="small danger" onclick="removeItem('expenses','${x.id}')">حذف</button>
+      </div>
+    </div>`).join('') : '<div class="empty">لا توجد عمليات في هذا الشهر. الصق رسائل البنك أو استورد كشف الحساب.</div>';
+}
+
+function goTab(t) { document.querySelector(`[data-tab="${t}"]`)?.click(); }
+
+// تسجيل تلقائي عند فتح الرابط من اختصار/أتمتة: ...#sms=نص-الرسالة
+function handleIncomingURL() {
+  const raw = location.hash.replace(/^#/, '') || location.search.replace(/^\?/, '');
+  const sms = new URLSearchParams(raw).get('sms');
+  if (!sms) return false;
+  const items = splitMessages(sms).map(parseSMS).filter(Boolean);
+  const n = addExpenses(items);
+  history.replaceState(null, '', location.pathname);
+  goTab('expenses');
+  toast(n ? `✅ تم تسجيل ${n} عملية: ${items.map(x => x.title + ' ' + money(x.amount)).join('، ')}` :
+        items.length ? 'العملية مسجّلة مسبقاً' : 'لم يتم التعرف على مبلغ في الرسالة');
+  return true;
+}
 
 // ---------- النسخ الاحتياطي ----------
 function exportData() {
@@ -461,19 +947,24 @@ function importData(input) {
     const data = JSON.parse(t);
     if (!data || !Array.isArray(data.contacts)) throw new Error();
     if (!confirm('سيتم استبدال البيانات الحالية بالنسخة المستوردة. متابعة؟')) return;
-    db = { contacts: data.contacts || [], bills: data.bills || [], events: data.events || [] };
+    db = { contacts: data.contacts || [], bills: data.bills || [], events: data.events || [], expenses: data.expenses || [] };
     persist(); alert('تم الاستيراد بنجاح');
   }).catch(() => alert('الملف غير صالح')).finally(() => input.value = '');
 }
 function wipeAll() {
   if (!confirm('سيتم حذف كل البيانات نهائياً. هل أنت متأكد؟')) return;
-  db = { contacts: [], bills: [], events: [] }; persist();
+  db = { contacts: [], bills: [], events: [], expenses: [] }; persist();
 }
 
 // ---------- البداية ----------
 load();
+fillCatSelects();
 render();
-try { const t = localStorage.getItem(KEY + '-tab'); if (t) document.querySelector(`[data-tab="${t}"]`)?.click(); } catch (e) {}
+document.getElementById('autoUrl').textContent = location.href.split('#')[0].split('?')[0] + '#sms=';
+if (!handleIncomingURL()) {
+  try { const t = localStorage.getItem(KEY + '-tab'); if (t) goTab(t); } catch (e) {}
+}
+window.addEventListener('hashchange', handleIncomingURL);
 </script>
 </body>
 </html>
