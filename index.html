@@ -166,7 +166,6 @@
   <!-- المصروفات -->
   <section id="tab-expenses" class="hidden">
     <div class="toolbar">
-      <button class="primary appOnly" onclick="readPhoneSms()">📲 جلب رسائل البنك من الجوال</button>
       <button class="primary" onclick="openSms()">📩 لصق رسائل البنك</button>
       <label class="btn" style="margin:0;color:var(--text)">📄 استيراد كشف حساب (CSV)
         <input type="file" accept=".csv,text/csv" class="hidden" onchange="importStatement(this)">
@@ -177,6 +176,10 @@
       <input id="expMonth" type="month" style="flex:0 0 auto;width:auto">
       <select id="expCat" class="catSelect" data-all="1"></select>
       <input id="expSearch" type="search" placeholder="ابحث في المصروفات">
+    </div>
+    <div class="card appOnly" id="shareHint">
+      <b>⚡ أسرع طريقة تسجّل فيها رسالة البنك</b>
+      <p class="muted" style="margin:6px 0 0">من تطبيق <b>الرسائل</b> اضغط مطولاً على رسالة البنك، واختر <b>مشاركة</b>، ثم <b>دفتري</b>. تنحفظ العملية على طول بمبلغها ومتجرها وتصنيفها.</p>
     </div>
     <div id="expSummary"></div>
     <div id="expList"></div>
@@ -448,6 +451,7 @@ let db = { contacts: [], bills: [], events: [], expenses: [], settings: {} };
 // داخل تطبيق أندرويد يتوفر جسر AndroidApp (جهات الاتصال، الرسائل، الحفظ، المشاركة، قفل الجوال)
 const IS_APP = !!(window.AndroidApp && AndroidApp.isApp && AndroidApp.isApp());
 document.body.classList.toggle('app', IS_APP);
+const CAN_SMS = IS_APP && typeof AndroidApp.readSms === 'function';
 const BIO = IS_APP ? 'البصمة / قفل الجوال' : 'البصمة / Face ID';
 let skipLockOnce = false;   // لا نقفل عند الخروج المؤقت لاختيار ملف أو اتصال أو إذن
 
@@ -1031,7 +1035,7 @@ function renderExpenses() {
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
   const max = cats.length ? cats[0][1] : 1;
   const senders = (db.settings.bankSenders || []);
-  const autoLine = IS_APP && senders.length ? `<div class="card row between">
+  const autoLine = CAN_SMS && senders.length ? `<div class="card row between">
       <span>🔄 التسجيل التلقائي شغّال من: <b dir="ltr">${senders.map(esc).join('، ')}</b></span>
       <button class="small" onclick="stopAutoSms()">إيقاف</button></div>` : '';
   document.getElementById('expSummary').innerHTML = autoLine + `
@@ -1296,7 +1300,7 @@ function readPhoneSms() {
 }
 function autoSyncSms() {
   const st = db.settings || {};
-  if (!IS_APP || !(st.bankSenders || []).length || !AndroidApp.hasSmsPermission()) return;
+  if (!CAN_SMS || !(st.bankSenders || []).length || !AndroidApp.hasSmsPermission()) return;
   smsMode = 'auto';
   AndroidApp.readSms(String(st.smsSince || DAYS90()));
 }
@@ -1319,6 +1323,14 @@ window.onNativeSms = json => {
   if (!items.length) { alert('ما لقيت رسائل عمليات بنكية في آخر 90 يوم.'); return; }
   pendingSmsSince = maxD;
   showPreview(items, `لقيت ${items.length} عملية في رسائل آخر 90 يوم. اللي تحفظه، التطبيق بيسجّل رسائل نفس البنك لحاله كل ما تفتحه.`);
+};
+// نص مُشارك إلى التطبيق (رسالة بنك من تطبيق الرسائل)
+window.onSharedText = text => {
+  const items = splitMessages(text).map(m => parseSMS(m)).filter(Boolean);
+  if (!items.length) { toast('ما لقيت مبلغ في الرسالة المشاركة'); return; }
+  const n = addExpenses(items);
+  if (!isLocked()) goTab('expenses');
+  toast(n ? `✅ تم تسجيل: ${items.map(x => x.title + ' ' + money(x.amount)).join('، ')}` : 'العملية مسجّلة من قبل');
 };
 window.handleBack = () => {
   if (isLocked()) return false;

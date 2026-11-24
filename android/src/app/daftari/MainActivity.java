@@ -35,12 +35,13 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     static final String HOST = "appassets.androidplatform.net";
     static final String BASE = "https://" + HOST + "/";
-    static final int REQ_FILE = 1, REQ_SAVE = 2, REQ_AUTH = 3, REQ_CONTACTS = 10, REQ_SMS = 11;
+    static final int REQ_FILE = 1, REQ_SAVE = 2, REQ_AUTH = 3, REQ_CONTACTS = 10;
 
     WebView web;
     ValueCallback<Uri[]> fileCb;
     String pendingSave;
-    long smsSince;
+    String sharedText;
+    boolean pageReady;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -58,6 +59,12 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(new Bridge(), "AndroidApp");
 
         web.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView v, String url) {
+                pageReady = true;
+                flushShared();
+            }
+
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
                 Uri u = r.getUrl();
@@ -124,7 +131,30 @@ public class MainActivity extends Activity {
         });
 
         setContentView(web);
+        takeShared(getIntent());
         web.loadUrl(BASE + "index.html");
+    }
+
+    /** نص مُشارك من تطبيق آخر (مثل رسالة البنك من تطبيق الرسائل). */
+    void takeShared(Intent i) {
+        if (i == null || !Intent.ACTION_SEND.equals(i.getAction())) return;
+        CharSequence t = i.getCharSequenceExtra(Intent.EXTRA_TEXT);
+        if (t == null || t.length() == 0) return;
+        sharedText = t.toString();
+        if (pageReady) flushShared();
+    }
+
+    void flushShared() {
+        if (sharedText == null) return;
+        js("window.onSharedText && onSharedText(" + JSONObject.quote(sharedText) + ")");
+        sharedText = null;
+    }
+
+    @Override
+    protected void onNewIntent(Intent i) {
+        super.onNewIntent(i);
+        setIntent(i);
+        takeShared(i);
     }
 
     static String mime(String p) {
@@ -173,29 +203,6 @@ public class MainActivity extends Activity {
         } }).start();
     }
 
-    // ---------- رسائل SMS ----------
-    void sendSms() {
-        final long since = smsSince;
-        new Thread(new Runnable() { public void run() {
-            JSONArray out = new JSONArray();
-            Cursor c = null;
-            try {
-                c = getContentResolver().query(Uri.parse("content://sms/inbox"),
-                    new String[] { "address", "body", "date" }, "date > ?",
-                    new String[] { String.valueOf(since) }, "date ASC");
-                while (c != null && c.moveToNext()) {
-                    JSONObject o = new JSONObject();
-                    o.put("a", c.getString(0) == null ? "" : c.getString(0));
-                    o.put("b", c.getString(1) == null ? "" : c.getString(1));
-                    o.put("d", c.getLong(2));
-                    out.put(o);
-                }
-            } catch (Exception e) { /* نعيد ما جُمع */ }
-            finally { if (c != null) c.close(); }
-            js("window.onNativeSms && onNativeSms(" + JSONObject.quote(out.toString()) + ")");
-        } }).start();
-    }
-
     // ---------- مشاركة التطبيق نفسه ----------
     void shareApk(String text) {
         Intent i = new Intent(Intent.ACTION_SEND);
@@ -213,16 +220,6 @@ public class MainActivity extends Activity {
             runOnUiThread(new Runnable() { public void run() {
                 if (granted(Manifest.permission.READ_CONTACTS)) sendContacts();
                 else requestPermissions(new String[] { Manifest.permission.READ_CONTACTS }, REQ_CONTACTS);
-            } });
-        }
-
-        @JavascriptInterface public boolean hasSmsPermission() { return granted(Manifest.permission.READ_SMS); }
-
-        @JavascriptInterface public void readSms(String sinceMs) {
-            try { smsSince = Long.parseLong(sinceMs); } catch (Exception e) { smsSince = 0; }
-            runOnUiThread(new Runnable() { public void run() {
-                if (granted(Manifest.permission.READ_SMS)) sendSms();
-                else requestPermissions(new String[] { Manifest.permission.READ_SMS }, REQ_SMS);
             } });
         }
 
@@ -272,7 +269,6 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int req, String[] perms, int[] res) {
         boolean ok = res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED;
         if (req == REQ_CONTACTS) { if (ok) sendContacts(); else js("onNativeDenied('contacts')"); }
-        if (req == REQ_SMS) { if (ok) sendSms(); else js("onNativeDenied('sms')"); }
     }
 
     @Override
